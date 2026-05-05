@@ -34,7 +34,7 @@
 | Notes | Notepad app |
 | Image Viewer | Image viewer placeholder |
 | App Store | Browse by category, search, install/uninstall apps |
-| Media Player | Audio player with track list, playback controls, volume |
+| Media Player | Audio + video playback, library with search/filter, drag/drop file import, shuffle, repeat (off/all/one), real seek/volume/mute |
 | Shortcuts | Browse, remap, and reset all keyboard shortcuts |
 
 ### Cloud & Backend

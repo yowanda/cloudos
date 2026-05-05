@@ -171,10 +171,10 @@
   - [ ] Context-aware (can read files, run commands)
   - [ ] Prompt templates
 - [x] Media Player
-  - [ ] Video player (video.js)
+  - [x] Video player (HTML5 <video>, supports mp4/webm/ogg)
   - [x] Audio player with track list
-  - [x] Playback controls + volume
-  - [ ] Playlist support
+  - [x] Playback controls + volume + seek + mute
+  - [x] Playlist support (search, filter audio/video, shuffle, repeat off/all/one, drag/drop or file picker)
 - [ ] Advanced features
   - [x] Multi-desktop workspace UI (taskbar switcher, Ctrl+Alt+Arrow / Ctrl+Alt+1..9 shortcuts, per-workspace window filtering, persisted)
   - [x] Custom keyboard shortcut editor (Shortcuts app: record key combos, conflict detection, per-shortcut + global reset, persisted in localStorage)
