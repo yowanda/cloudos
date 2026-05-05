@@ -1,7 +1,8 @@
-import { Component, For, createSignal, createEffect, onCleanup } from "solid-js";
+import { Component, For, Show, createSignal, createEffect, onCleanup } from "solid-js";
 import { windowStore, focusWindow, minimizeWindow } from "../stores/window-store";
 import { toggleStartMenu, startMenuOpen } from "../stores/startmenu-store";
 import { hideContextMenu } from "../stores/contextmenu-store";
+import { toggleNotificationCenter, unreadCount } from "../stores/notification-store";
 
 const Clock: Component = () => {
   const [time, setTime] = createSignal("");
@@ -97,6 +98,18 @@ const Taskbar: Component = () => {
         </button>
         <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Volume">
           🔊
+        </button>
+        <button
+          class="relative text-os-text-muted hover:text-os-text text-sm transition-colors"
+          title="Notifications"
+          onClick={(e) => { e.stopPropagation(); toggleNotificationCenter(); }}
+        >
+          🔔
+          <Show when={unreadCount() > 0}>
+            <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-os-danger text-white text-[8px] flex items-center justify-center font-bold">
+              {unreadCount() > 9 ? "9+" : unreadCount()}
+            </span>
+          </Show>
         </button>
         <Clock />
       </div>

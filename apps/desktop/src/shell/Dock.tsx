@@ -17,6 +17,8 @@ const defaultDockItems: DockItem[] = [
   { id: "com.cloudos.terminal", name: "Terminal", icon: "⬛", width: 700, height: 450 },
   { id: "com.cloudos.editor", name: "Editor", icon: "📝", width: 750, height: 520 },
   { id: "com.cloudos.browser", name: "Browser", icon: "🌐", width: 900, height: 600 },
+  { id: "com.cloudos.mediaplayer", name: "Media Player", icon: "🎵", width: 400, height: 550 },
+  { id: "com.cloudos.appstore", name: "App Store", icon: "🏪", width: 750, height: 500 },
   { id: "com.cloudos.settings", name: "Settings", icon: "⚙️", width: 600, height: 450 },
 ];
 

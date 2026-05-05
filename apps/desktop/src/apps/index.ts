@@ -7,6 +7,8 @@ import Calculator from "./Calculator";
 import ImageViewer from "./ImageViewer";
 import Browser from "./Browser";
 import Notes from "./Notes";
+import AppStore from "./AppStore";
+import MediaPlayer from "./MediaPlayer";
 
 export function registerAllApps() {
   registerAppComponent("com.cloudos.files", FileManager);
@@ -17,4 +19,6 @@ export function registerAllApps() {
   registerAppComponent("com.cloudos.imageviewer", ImageViewer);
   registerAppComponent("com.cloudos.browser", Browser);
   registerAppComponent("com.cloudos.notes", Notes);
+  registerAppComponent("com.cloudos.appstore", AppStore);
+  registerAppComponent("com.cloudos.mediaplayer", MediaPlayer);
 }

@@ -13,6 +13,8 @@ import { windowStore, minimizeWindow } from "./stores/window-store";
 import { registerAllApps } from "./apps";
 import LockScreen from "./shell/LockScreen";
 import { lockScreen } from "./stores/auth-store";
+import { ToastLayer, NotificationCenter } from "./shell/Notifications";
+import { notify } from "./stores/notification-store";
 
 const App: Component = () => {
   onMount(() => {
@@ -61,6 +63,16 @@ const App: Component = () => {
     });
 
     initShortcuts();
+
+    // Welcome notification
+    setTimeout(() => {
+      notify({
+        title: "Welcome to CloudOS",
+        message: "Your browser-based operating system is ready.",
+        type: "info",
+        icon: "☁️",
+      });
+    }, 1500);
   });
 
   return (
@@ -71,6 +83,8 @@ const App: Component = () => {
         <StartMenu />
         <ContextMenuLayer />
         <WindowSwitcher />
+        <NotificationCenter />
+        <ToastLayer />
         <Taskbar />
         <Dock />
         <LockScreen />
