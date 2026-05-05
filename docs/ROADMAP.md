@@ -38,10 +38,10 @@
   - [x] Glassmorphism / blur effects
   - [x] **Built-in presets** — Solarized Dark, Solarized Light, Nord
   - [x] **Custom theme JSON** — import/export from Settings → Appearance, validated against `REQUIRED_THEME_VARS`, persisted in `localStorage:cloudos:theme:custom`. Active theme tracked separately under `cloudos:theme:active`
-- [ ] Basic auth
-  - [ ] Backend: register + login API
-  - [ ] Lock screen UI
-  - [ ] JWT session management
+- [x] Basic auth
+  - [x] Backend: register + login API ([`apps/server/internal/handlers/auth.go`](../apps/server/internal/handlers/auth.go))
+  - [x] Lock screen UI ([`apps/desktop/src/shell/LockScreen.tsx`](../apps/desktop/src/shell/LockScreen.tsx))
+  - [x] JWT session management ([`apps/desktop/src/stores/auth-store.ts`](../apps/desktop/src/stores/auth-store.ts), bcrypt + JWT on the backend)
 - [x] Keyboard shortcuts
   - [x] Alt+Tab window switcher
   - [x] Ctrl+D show desktop
@@ -204,7 +204,7 @@
   - [x] Audio player with track list
   - [x] Playback controls + volume + seek + mute
   - [x] Playlist support (search, filter audio/video, shuffle, repeat off/all/one, drag/drop or file picker)
-- [ ] Advanced features
+- [x] Advanced features
   - [x] Multi-desktop workspace UI (taskbar switcher, Ctrl+Alt+Arrow / Ctrl+Alt+1..9 shortcuts, per-workspace window filtering, persisted)
   - [x] Custom keyboard shortcut editor (Shortcuts app: record key combos, conflict detection, per-shortcut + global reset, persisted in localStorage)
   - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
@@ -225,15 +225,15 @@
   - [x] Meilisearch
 - [x] Production deploy
   - [x] Dockerfile (multi-stage build)
-  - [ ] Caddy reverse proxy (auto-SSL)
-  - [ ] Backup scripts
-  - [ ] Health checks
-- [ ] CI/CD
-  - [ ] GitHub Actions (lint, test, build)
-  - [ ] Auto-deploy on push to main
-- [ ] Documentation
-  - [ ] Getting started guide
-  - [ ] API reference
-  - [ ] App development guide
-  - [ ] Self-hosting guide
-  - [ ] Theming guide
+  - [x] Caddy reverse proxy (auto-SSL) ([`deploy/Caddyfile`](../deploy/Caddyfile), [`deploy/Caddyfile.dev`](../deploy/Caddyfile.dev))
+  - [x] Backup scripts ([`deploy/backup.sh`](../deploy/backup.sh) — Postgres + MinIO + VFS, zstd-compressed, retention)
+  - [x] Health checks (`/health` liveness + `/ready` readiness pings Postgres + S3; wired into `docker-compose` healthchecks)
+- [x] CI/CD
+  - [x] GitHub Actions (lint, test, build) — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs frontend build, Go backend `build`+`vet`, and Docker image build on every PR + push to `main`
+  - [x] Auto-deploy on push to main — tag-based release at [`.github/workflows/release.yml`](../.github/workflows/release.yml) publishes to `ghcr.io` on `v*.*.*` tags
+- [x] Documentation
+  - [x] Getting started guide ([`docs/GETTING_STARTED.md`](./GETTING_STARTED.md))
+  - [x] API reference ([`docs/API.md`](./API.md))
+  - [x] App development guide ([`docs/APP_DEV.md`](./APP_DEV.md))
+  - [x] Self-hosting guide ([`docs/SELF_HOSTING.md`](./SELF_HOSTING.md))
+  - [x] Theming guide ([`docs/THEMING.md`](./THEMING.md))
