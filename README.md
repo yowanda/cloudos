@@ -39,6 +39,14 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### Image Viewer
+Real image-viewer app (replaces the old stub). Pan with click-drag, zoom with the mouse wheel or `+`/`−`, rotate with `R`, reset with `0`, navigate with `←`/`→`, slideshow with `Space`. Filmstrip thumbnails, status bar with zoom + rotation, URL input box, host drag-drop. When opened from File Manager, it auto-loads sibling images in the same folder so you can flip through a directory.
+
+Supported sources:
+- VFS files dropped from the host (PNG / JPG / GIF / WebP stored as data URLs; SVG kept as text)
+- Raw URLs typed into the toolbar
+- Anything dropped directly onto the viewer window
+
 ### File Manager extras
 - **Quick Look** — click the 👁️ button in the toolbar (or after selecting a file) to slide out a preview pane with the file icon, MIME type, size, modified time, and inline content for text / JSON / SVG. Folders show their child count.
 - **Drag-to-move** — drag a file or folder onto any folder (in the file listing **or** in the left sidebar) to move it. The drop target glows with the accent color, the source row dims while dragging, and a notification confirms the move.

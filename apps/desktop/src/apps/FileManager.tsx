@@ -20,6 +20,7 @@ import { showContextMenu } from "../stores/contextmenu-store";
 import { openWindow } from "../stores/window-store";
 import { notify } from "../stores/notification-store";
 import ShareDialog from "../shell/ShareDialog";
+import { openImageInViewer } from "./ImageViewer";
 
 const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
   const icon = () => {
@@ -88,7 +89,26 @@ const FileManager: Component<{ windowId: string }> = () => {
   const handleDoubleClick = (entry: VFSEntry) => {
     if (entry.isDir) {
       navigate(entry.path);
-    } else if (entry.mimeType.startsWith("text/") || entry.mimeType === "application/json") {
+      return;
+    }
+    if (entry.mimeType.startsWith("image/")) {
+      // Build a sibling list of all images in the same directory so Image
+      // Viewer can offer prev/next + slideshow without re-querying the VFS.
+      const parent = entry.path.substring(0, entry.path.lastIndexOf("/")) || "/";
+      const siblings = listDir(parent)
+        .filter((e) => !e.isDir && e.mimeType.startsWith("image/"))
+        .map((e) => e.path);
+      openImageInViewer({ src: entry.content ?? "", name: entry.name, siblings });
+      openWindow({
+        appId: "com.cloudos.imageviewer",
+        title: entry.name,
+        icon: "🖼️",
+        width: 720,
+        height: 560,
+      });
+      return;
+    }
+    if (entry.mimeType.startsWith("text/") || entry.mimeType === "application/json") {
       openWindow({
         appId: "com.cloudos.editor",
         title: entry.name,
@@ -438,7 +458,20 @@ const FileManager: Component<{ windowId: string }> = () => {
                   createFile(currentPath(), file.name, reader.result as string);
                   refresh();
                 };
-                reader.readAsText(file);
+                // Binary-ish MIME types (images, audio, video, pdfs) need to be
+                // stored as data URLs so the viewer apps can render them; text
+                // files use plain text so editors stay usable.
+                const t = file.type;
+                if (
+                  t.startsWith("image/") ||
+                  t.startsWith("audio/") ||
+                  t.startsWith("video/") ||
+                  t === "application/pdf"
+                ) {
+                  reader.readAsDataURL(file);
+                } else {
+                  reader.readAsText(file);
+                }
               }
               notify({
                 title: "Files Uploaded",

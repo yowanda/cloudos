@@ -75,9 +75,9 @@
   - [ ] Save to VFS
   - [x] Minimap placeholder
 - [x] Image Viewer (placeholder)
-  - [ ] Pan, zoom, rotate
-  - [ ] Slideshow mode
-  - [ ] Support: PNG, JPG, GIF, WebP, SVG
+  - [x] Pan, zoom, rotate (mouse wheel zoom, click-drag pan, ↺/↻ rotate, R key, 0 reset)
+  - [x] Slideshow mode (Space key / toolbar button, 3 s auto-advance, ←/→ navigate)
+  - [x] Support: PNG, JPG, GIF, WebP, SVG (data URLs from VFS, raw URLs, host drag-drop)
 - [x] Settings App
   - [x] Appearance (theme, accent color)
   - [x] Wallpaper picker (12 gradient wallpapers)
