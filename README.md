@@ -80,6 +80,7 @@ Real code editor (replaces the old stub).
 - **VFS save** — `Ctrl+S` writes the active tab back to its VFS path (or prompts for one for unsaved scratch tabs); creates ancestor folders as needed via `writeFile()`
 - **Find / Replace** — `Ctrl+F` opens an inline find bar with "Next" + "Replace all"
 - **Cross-window handoff** — File Manager double-click on a text/JSON file routes through `openInEditor()` (same pattern as `openImageInViewer`), pre-loading the content + path so save lands back in the right place
+- **Monaco backend (opt-in)** — Settings → Editor → "Use Monaco Editor" swaps the textarea + tokenizer for the same Monaco engine VS Code uses. Adds bracket matching, multi-cursor, native find &amp; replace UI, and Monaco's own syntax highlighting on top of the built-in tokenizer set. Lazy-loaded (~3 MB chunk fetched on first use, then cached by the service worker), so leaving it off keeps the initial bundle exactly as-is. Falls back to a `<textarea>` if the dynamic import fails (offline + uncached). See [`MonacoEditor.tsx`](./apps/desktop/src/apps/MonacoEditor.tsx) and [`editor-prefs.ts`](./apps/desktop/src/core/editor-prefs.ts).
 
 Keyboard: `Ctrl+S` save · `Ctrl+N` new scratch tab · `Ctrl+W` close active tab · `Ctrl+F` find/replace · `Esc` close find bar.
 

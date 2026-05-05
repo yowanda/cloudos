@@ -1,8 +1,13 @@
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { Component, For, Show, createMemo, createSignal, lazy, onCleanup, onMount } from "solid-js";
 import { writeFile, VFSQuotaExceededError, formatSize, getEntry } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
 import { detectLanguage, languageLabel, tokenize, tokenClass, type Language } from "../core/syntax";
 import { getVfsDragPath, isAcceptableDrop } from "../core/drag-drop";
+import { useMonaco } from "../core/editor-prefs";
+
+// Lazy chunk — Monaco itself is ~3 MB and must NOT enter the initial bundle.
+// `solid-js`' `lazy()` does the dynamic import + Suspense boundary for us.
+const MonacoEditor = lazy(() => import("./MonacoEditor"));
 
 /**
  * Cross-window handoff signal — File Manager queues a file open here, the
@@ -381,34 +386,52 @@ const TextEditor: Component<{ windowId: string }> = () => {
 
       {/* Editor area */}
       <div class="flex-1 flex overflow-hidden">
-        {/* Line numbers */}
-        <div class="w-12 flex-shrink-0 bg-[#181825] text-[#6c7086] text-right py-2 pr-3 select-none overflow-hidden leading-[20px]">
-          <For each={Array.from({ length: lineCount() }, (_, i) => i + 1)}>
-            {(n) => <div class="h-[20px]">{n}</div>}
-          </For>
-        </div>
-
-        {/* Highlight overlay + textarea — overlay rendered behind the
-            transparent textarea, scroll positions kept in sync. */}
-        <div class="relative flex-1 overflow-hidden">
-          <div
-            ref={highlightRef}
-            aria-hidden="true"
-            class="absolute inset-0 p-2 leading-[20px] whitespace-pre overflow-auto pointer-events-none"
-            style={{ "tab-size": "2" }}
-          >
-            <RenderTokens />
+        {/* Line numbers — hidden in Monaco mode (Monaco renders its own). */}
+        <Show when={!useMonaco()}>
+          <div class="w-12 flex-shrink-0 bg-[#181825] text-[#6c7086] text-right py-2 pr-3 select-none overflow-hidden leading-[20px]">
+            <For each={Array.from({ length: lineCount() }, (_, i) => i + 1)}>
+              {(n) => <div class="h-[20px]">{n}</div>}
+            </For>
           </div>
-          <textarea
-            ref={textareaRef}
+        </Show>
+
+        {/* Editor surface — either Monaco (if user opted in via Settings)
+            or the lightweight built-in textarea + tokenizer overlay.
+            Switching at runtime is fully reactive: toggling the setting
+            unmounts one branch and mounts the other.
+            Monaco brings its own line numbers + scrollbar UI, so the host
+            line-number gutter is hidden when Monaco is active. */}
+        <Show
+          when={useMonaco()}
+          fallback={
+            <div class="relative flex-1 overflow-hidden">
+              <div
+                ref={highlightRef}
+                aria-hidden="true"
+                class="absolute inset-0 p-2 leading-[20px] whitespace-pre overflow-auto pointer-events-none"
+                style={{ "tab-size": "2" }}
+              >
+                <RenderTokens />
+              </div>
+              <textarea
+                ref={textareaRef}
+                value={activeContent()}
+                onInput={(e) => onContentInput(e.currentTarget.value)}
+                onScroll={onScroll}
+                class="absolute inset-0 bg-transparent text-transparent caret-[#cdd6f4] selection:bg-os-accent/40 p-2 resize-none focus:outline-none leading-[20px] overflow-auto whitespace-pre"
+                spellcheck={false}
+                style={{ "tab-size": "2" }}
+              />
+            </div>
+          }
+        >
+          <MonacoEditor
             value={activeContent()}
-            onInput={(e) => onContentInput(e.currentTarget.value)}
-            onScroll={onScroll}
-            class="absolute inset-0 bg-transparent text-transparent caret-[#cdd6f4] selection:bg-os-accent/40 p-2 resize-none focus:outline-none leading-[20px] overflow-auto whitespace-pre"
-            spellcheck={false}
-            style={{ "tab-size": "2" }}
+            language={activeTab()?.language ?? "plaintext"}
+            onChange={onContentInput}
+            onSave={saveActive}
           />
-        </div>
+        </Show>
       </div>
 
       {/* Status bar */}

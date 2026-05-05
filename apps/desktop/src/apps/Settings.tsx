@@ -37,6 +37,7 @@ import {
 } from "../core/permissions";
 import { listShortcuts, resetShortcut } from "../core/shortcut-manager";
 import { openWindow } from "../stores/window-store";
+import { useMonaco, setUseMonaco } from "../core/editor-prefs";
 import {
   pendingSettingsPage,
   consumePendingSettingsPage,
@@ -58,6 +59,7 @@ type SettingsPage =
   | "apps"
   | "keyboard"
   | "storage"
+  | "editor"
   | "backend"
   | "about";
 
@@ -268,6 +270,7 @@ const Settings: Component<{ windowId: string }> = () => {
     { id: "apps", label: "Apps", icon: "📦" },
     { id: "keyboard", label: "Keyboard", icon: "⌨️" },
     { id: "storage", label: "Storage", icon: "💾" },
+    { id: "editor", label: "Editor", icon: "📝" },
     { id: "backend", label: "Backend", icon: "🔗" },
     { id: "about", label: "About", icon: "ℹ️" },
   ];
@@ -594,6 +597,41 @@ const Settings: Component<{ windowId: string }> = () => {
             >
               Empty Trash
             </button>
+          </div>
+        </Show>
+
+        <Show when={page() === "editor"}>
+          <h2 class="text-sm font-semibold mb-4">Editor</h2>
+
+          <div class="rounded-lg border border-os-border p-4 mb-6">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useMonaco()}
+                onChange={(e) => setUseMonaco(e.currentTarget.checked)}
+                class="mt-0.5"
+              />
+              <div class="flex-1">
+                <div class="text-os-text">Use Monaco Editor</div>
+                <div class="text-[10px] text-os-text-muted mt-1 leading-relaxed">
+                  Switch the Text Editor app to Microsoft's Monaco editor — the
+                  same engine that powers VS Code. Adds bracket matching,
+                  multi-cursor, native find &amp; replace UI, and richer syntax
+                  highlighting. <strong>~3 MB extra</strong> downloaded the first
+                  time it's enabled (lazy-loaded chunk; cached by the service
+                  worker afterwards). Off by default — the lightweight built-in
+                  textarea + tokenizer overlay covers the 80% case at zero extra
+                  bundle cost.
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div class="text-[10px] text-os-text-muted leading-relaxed">
+            Toggling at runtime swaps the editor surface for every open Text
+            Editor window. Unsaved buffers are preserved across the swap.
+            Disable this if you're on a slow connection or just want the
+            zippiest possible startup.
           </div>
         </Show>
 
