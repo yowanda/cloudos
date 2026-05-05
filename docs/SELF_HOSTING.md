@@ -5,6 +5,11 @@ team or for personal use. Single-VPS deployments are well-supported; this
 guide assumes one Linux VM with Docker. For multi-node Kubernetes, the same
 container images apply but you'll need to author Helm charts yourself.
 
+> Looking to self-host the **AI Assistant's LLM backend** instead of (or
+> in addition to) the OS itself? See
+> [OLLAMA_HOSTING.md](./OLLAMA_HOSTING.md) for an end-to-end guide to
+> running Ollama 24/7 on Oracle Cloud Always Free + Cloudflare Tunnel.
+
 ## Components
 
 | Component       | Purpose                              | Image                                 |
