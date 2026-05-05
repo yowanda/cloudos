@@ -208,7 +208,7 @@
   - [x] Multi-desktop workspace UI (taskbar switcher, Ctrl+Alt+Arrow / Ctrl+Alt+1..9 shortcuts, per-workspace window filtering, persisted)
   - [x] Custom keyboard shortcut editor (Shortcuts app: record key combos, conflict detection, per-shortcut + global reset, persisted in localStorage)
   - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
-  - [ ] Drag & drop between windows
+  - [x] **Drag & drop between windows** — `core/drag-drop.ts` defines a single shared MIME (`application/x-cloudos-vfs-path`) used by all CloudOS windows that participate. Drag a row in **FileManager** onto an open **TextEditor** to open it as a new tab (focuses the existing tab if the path is already open). Drag onto an open **ImageViewer** to add it to the carousel (rejects non-image MIMEs with a friendly notification). Drops also accept `Files` from outside the browser (host OS drag-in) — TextEditor reads as text, ImageViewer reads as data-URL. Both apps show a dashed accent overlay while a drop is staged.
   - [x] System sounds (WebAudio synth: open/close/min/max, notify success/warning/error, lock/unlock; Settings toggle + volume + preview)
   - [x] Boot animation / splash screen
 

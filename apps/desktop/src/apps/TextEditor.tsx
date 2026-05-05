@@ -1,7 +1,8 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
-import { writeFile, VFSQuotaExceededError, formatSize } from "../vfs/vfs";
+import { writeFile, VFSQuotaExceededError, formatSize, getEntry } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
 import { detectLanguage, languageLabel, tokenize, tokenClass, type Language } from "../core/syntax";
+import { getVfsDragPath, isAcceptableDrop } from "../core/drag-drop";
 
 /**
  * Cross-window handoff signal — File Manager queues a file open here, the
@@ -51,6 +52,7 @@ const TextEditor: Component<{ windowId: string }> = () => {
   })]);
   const [activeId, setActiveId] = createSignal<number>(tabs()[0].id);
   const [findOpen, setFindOpen] = createSignal(false);
+  const [isDragOver, setIsDragOver] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal("");
   const [replaceQuery, setReplaceQuery] = createSignal("");
 
@@ -133,33 +135,38 @@ const TextEditor: Component<{ windowId: string }> = () => {
     notify({ title: "Saved", message: path, type: "success", icon: "💾" });
   };
 
+  /** Open a tab for an already-loaded file (or focus the existing tab if any). */
+  const openLoaded = (path: string, name: string, content: string, language?: Language) => {
+    const lang = language ?? detectLanguage(name);
+    const tab = newTab({ path, name, content, savedContent: content, language: lang });
+    setTabs((prev) => {
+      const found = prev.find((t) => t.path && t.path === path);
+      if (found) {
+        setActiveId(found.id);
+        return prev;
+      }
+      return [...prev, tab];
+    });
+    setActiveId(tab.id);
+  };
+
+  /** Look up `path` in the VFS and open it (if it's a regular file). */
+  const openVfsPath = (path: string): boolean => {
+    const entry = getEntry(path);
+    if (!entry || entry.isDir) {
+      notify({ title: "Can't open", message: `${path} is not a file`, type: "warning", icon: "📜" });
+      return false;
+    }
+    openLoaded(entry.path, entry.name, entry.content ?? "");
+    return true;
+  };
+
   // ─── consume cross-window open signal ────────────────────────────────
   onMount(() => {
     const pending = pendingOpen();
     if (pending) {
       setPendingOpen(null);
-      const lang = pending.language ?? detectLanguage(pending.name);
-      const tab = newTab({
-        path: pending.path,
-        name: pending.name,
-        content: pending.content,
-        savedContent: pending.content,
-        language: lang,
-      });
-      setTabs((prev) => {
-        // If the file's already open, switch to it instead of duplicating.
-        const found = prev.find((t) => t.path && t.path === pending.path);
-        if (found) {
-          setActiveId(found.id);
-          return prev;
-        }
-        // Replace the initial scratch tab if it's untouched.
-        if (prev.length === 1 && prev[0].path === null && prev[0].content === prev[0].savedContent && tabSeq === 1) {
-          // tabSeq tracks total ever-allocated tabs; condition above is best-effort
-        }
-        return [...prev, tab];
-      });
-      setActiveId(tab.id);
+      openLoaded(pending.path, pending.name, pending.content, pending.language);
     }
   });
 
@@ -230,8 +237,63 @@ const TextEditor: Component<{ windowId: string }> = () => {
     updateTab(t.id, { content: next });
   };
 
+  // ─── drop handlers (drag from FileManager / OS) ──────────────────────
+  const handleDragOver = (e: DragEvent) => {
+    if (!isAcceptableDrop(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    setIsDragOver(true);
+  };
+  const handleDragLeave = (e: DragEvent) => {
+    // Ignore leave events for child elements — only clear when leaving the
+    // outer container.
+    if (e.currentTarget === e.target) setIsDragOver(false);
+    else if (!e.relatedTarget || !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+  const handleDrop = (e: DragEvent) => {
+    setIsDragOver(false);
+    const vfsPath = getVfsDragPath(e);
+    if (vfsPath) {
+      e.preventDefault();
+      openVfsPath(vfsPath);
+      return;
+    }
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      e.preventDefault();
+      let opened = 0;
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const reader = new FileReader();
+        reader.onload = () => {
+          openLoaded(`/${f.name}`, f.name, String(reader.result ?? ""));
+          opened++;
+        };
+        reader.readAsText(f);
+      }
+      // Fire-and-forget notification — readers complete asynchronously.
+      notify({ title: "Opening files", message: `${files.length} file${files.length === 1 ? "" : "s"} from your OS`, type: "info", icon: "📜" });
+      void opened;
+    }
+  };
+
   return (
-    <div data-cloudos-editor="1" class="h-full flex flex-col bg-[#1e1e2e] text-[13px] font-mono overflow-hidden">
+    <div
+      data-cloudos-editor="1"
+      class="h-full flex flex-col bg-[#1e1e2e] text-[13px] font-mono overflow-hidden relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <Show when={isDragOver()}>
+        <div class="pointer-events-none absolute inset-0 z-50 bg-os-accent/15 border-4 border-dashed border-os-accent flex items-center justify-center">
+          <div class="text-sm text-white bg-os-accent/80 px-4 py-2 rounded">
+            Drop file to open in editor
+          </div>
+        </div>
+      </Show>
       {/* Tab bar */}
       <div class="flex items-center h-9 bg-[#181825] border-b border-[#313244] px-2 gap-1 overflow-x-auto">
         <For each={tabs()}>

@@ -93,6 +93,7 @@ Supported sources:
 ### File Manager extras
 - **Quick Look** — click the 👁️ button in the toolbar (or after selecting a file) to slide out a preview pane with the file icon, MIME type, size, modified time, and inline content for text / JSON / SVG. Folders show their child count.
 - **Drag-to-move** — drag a file or folder onto any folder (in the file listing **or** in the left sidebar) to move it. The drop target glows with the accent color, the source row dims while dragging, and a notification confirms the move.
+- **Cross-window drag & drop** — drag a row out of File Manager and drop it onto an open **Text Editor** to open the file as a new tab, or onto an open **Image Viewer** to add it to the carousel. The receiver shows a dashed accent overlay while the drop is staged. Image Viewer rejects non-image MIMEs gracefully. Both apps also accept files dragged from outside the browser (host OS drag-in).
 
 ### Deployment & Ops
 - **CI** (`.github/workflows/ci.yml`) builds the frontend + Go backend on every PR; on `main` it also builds both Docker images.

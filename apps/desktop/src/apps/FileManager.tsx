@@ -23,6 +23,7 @@ import { notify } from "../stores/notification-store";
 import ShareDialog from "../shell/ShareDialog";
 import { openImageInViewer } from "./ImageViewer";
 import { openInEditor } from "./TextEditor";
+import { setVfsDragPath, getVfsDragPath } from "../core/drag-drop";
 
 const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
   const icon = () => {
@@ -255,8 +256,7 @@ const FileManager: Component<{ windowId: string }> = () => {
   // Drag handlers for moving items within the file manager.
   const handleEntryDragStart = (e: DragEvent, entry: VFSEntry) => {
     if (inTrash()) return;
-    e.dataTransfer?.setData("application/x-cloudos-vfs-path", entry.path);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    setVfsDragPath(e, entry.path);
     setDragSrc(entry.path);
   };
   const handleEntryDragEnd = () => {
@@ -271,7 +271,7 @@ const FileManager: Component<{ windowId: string }> = () => {
     setDropTargetPath(folderPath);
   };
   const handleFolderDrop = (e: DragEvent, folderPath: string) => {
-    const src = e.dataTransfer?.getData("application/x-cloudos-vfs-path");
+    const src = getVfsDragPath(e);
     if (!src) return; // external (file upload) — handled by parent
     e.preventDefault();
     e.stopPropagation();

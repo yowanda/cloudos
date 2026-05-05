@@ -1,5 +1,7 @@
 import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { getEntry } from "../vfs/vfs";
+import { getVfsDragPath, isAcceptableDrop } from "../core/drag-drop";
+import { notify } from "../stores/notification-store";
 
 /**
  * Cross-window signal so File Manager can hand off an image to the viewer
@@ -119,11 +121,43 @@ const ImageViewer: Component<{ windowId: string }> = () => {
     onCleanup(() => window.removeEventListener("keydown", onKey));
   });
 
-  // Drag from host to drop image
-  const onDrop = (e: DragEvent) => {
+  // Drag from host or from another CloudOS window (FileManager)
+  const [isDragOver, setIsDragOver] = createSignal(false);
+  const onDragOver = (e: DragEvent) => {
+    if (!isAcceptableDrop(e)) return;
     e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    setIsDragOver(true);
+  };
+  const onDragLeave = (e: DragEvent) => {
+    if (e.currentTarget === e.target) setIsDragOver(false);
+    else if (!e.relatedTarget || !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+  const onDrop = (e: DragEvent) => {
+    setIsDragOver(false);
+    // 1. internal drag — VFS path
+    const vfsPath = getVfsDragPath(e);
+    if (vfsPath) {
+      e.preventDefault();
+      const entry = getEntry(vfsPath);
+      if (!entry || entry.isDir) {
+        notify({ title: "Can't open", message: `${vfsPath} is not a file`, type: "warning", icon: "🖼️" });
+        return;
+      }
+      if (!isImageMime(entry.mimeType)) {
+        notify({ title: "Not an image", message: `${entry.name} (${entry.mimeType})`, type: "warning", icon: "🖼️" });
+        return;
+      }
+      const src = entry.content ?? "";
+      if (src) addItem({ src, name: entry.name });
+      return;
+    }
+    // 2. external — OS files
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
+    e.preventDefault();
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/")) continue;
       const reader = new FileReader();
@@ -170,10 +204,18 @@ const ImageViewer: Component<{ windowId: string }> = () => {
 
   return (
     <div
-      class="h-full flex flex-col bg-[#0d0d0d] text-os-text"
-      onDragOver={(e) => e.preventDefault()}
+      class="h-full flex flex-col bg-[#0d0d0d] text-os-text relative"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      <Show when={isDragOver()}>
+        <div class="pointer-events-none absolute inset-0 z-50 bg-os-accent/15 border-4 border-dashed border-os-accent flex items-center justify-center">
+          <div class="text-sm text-white bg-os-accent/80 px-4 py-2 rounded">
+            Drop image to add
+          </div>
+        </div>
+      </Show>
       {/* Toolbar */}
       <div class="flex items-center gap-1 px-2 py-1 border-b border-os-border text-[11px] flex-shrink-0">
         <button
