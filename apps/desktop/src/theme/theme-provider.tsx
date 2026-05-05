@@ -1,15 +1,16 @@
 import { createEffect, type ParentComponent } from "solid-js";
-import { theme } from "../stores/theme-store";
-import { darkTheme } from "./themes/dark";
-import { lightTheme } from "./themes/light";
+import { currentTheme } from "../stores/theme-store";
 
-const themes = { dark: darkTheme, light: lightTheme };
-
+/**
+ * Applies the active theme's CSS custom properties to <html>. Reactive
+ * to `currentTheme()` so switching, importing, or removing themes
+ * re-applies immediately.
+ */
 export const ThemeProvider: ParentComponent = (props) => {
   createEffect(() => {
-    const current = themes[theme()];
+    const t = currentTheme();
     const root = document.documentElement;
-    for (const [key, value] of Object.entries(current.colors)) {
+    for (const [key, value] of Object.entries(t.colors)) {
       root.style.setProperty(key, value);
     }
   });

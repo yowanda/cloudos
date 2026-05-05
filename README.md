@@ -15,7 +15,7 @@
 - **Dock** — Pinned apps with running indicators, hover animations
 - **Start Menu** — App grid with search/filter
 - **Context Menu** — Right-click menus (desktop, window title bar with workspace move, per-component)
-- **Theme Engine** — Dark/light mode, CSS custom properties, glassmorphism effects
+- **Theme Engine** — 5 built-in themes (Dark, Light, **Solarized Dark/Light**, **Nord**), CSS custom properties, glassmorphism effects, persistent active-theme selection. **Theme JSON import/export** — Settings → Appearance lets you drop in a theme JSON (id, name, base, wallpaper, colors map) and the live shell switches to it; the same screen exports the active theme back out as JSON for sharing
 - **System Sounds** — WebAudio synth-based effects for window open/close/minimize/maximize, notifications, lock/unlock; toggle and volume slider in Settings
 - **Keyboard Shortcuts** — Alt+Tab (window switcher), Ctrl+D (show desktop), Ctrl+L (lock screen), Ctrl+Alt+→/← (next/prev workspace), Ctrl+Alt+1..9 (jump to workspace) — fully remappable from the **Shortcuts** app (record-key UI, conflict detection, reset to default)
 - **Lock Screen** — Login/register form, session restore, clock display

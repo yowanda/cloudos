@@ -1,5 +1,10 @@
-export const lightTheme = {
-  name: "light",
+import type { CloudOSTheme } from "../types";
+
+export const lightTheme: CloudOSTheme = {
+  id: "light",
+  name: "Light",
+  kind: "builtin",
+  base: "light",
   colors: {
     "--color-os-bg": "#f0f4f8",
     "--color-os-surface": "rgba(0, 0, 0, 0.04)",

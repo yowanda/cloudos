@@ -36,6 +36,8 @@
   - [x] Dark theme
   - [x] CSS custom properties system
   - [x] Glassmorphism / blur effects
+  - [x] **Built-in presets** — Solarized Dark, Solarized Light, Nord
+  - [x] **Custom theme JSON** — import/export from Settings → Appearance, validated against `REQUIRED_THEME_VARS`, persisted in `localStorage:cloudos:theme:custom`. Active theme tracked separately under `cloudos:theme:active`
 - [ ] Basic auth
   - [ ] Backend: register + login API
   - [ ] Lock screen UI

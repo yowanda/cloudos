@@ -1,23 +1,22 @@
 import { Component } from "solid-js";
-import { wallpaper, theme, setTheme } from "../stores/theme-store";
+import { wallpaper, currentTheme, setActiveTheme } from "../stores/theme-store";
 import { showContextMenu, hideContextMenu } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
-import { darkTheme } from "../theme/themes/dark";
-import { lightTheme } from "../theme/themes/light";
 
 const Desktop: Component = () => {
-  const currentWallpaper = () => {
-    if (wallpaper()) return wallpaper();
-    return theme() === "dark" ? darkTheme.wallpaper : lightTheme.wallpaper;
-  };
+  // Wallpaper override (set via Settings) takes priority over the
+  // theme's own wallpaper.
+  const currentWallpaper = () => wallpaper() || currentTheme().wallpaper;
 
   const handleContextMenu = (e: MouseEvent) => {
     e.preventDefault();
+    const t = currentTheme();
+    const isDark = t.base === "dark";
     showContextMenu(e.clientX, e.clientY, [
       {
-        label: theme() === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
-        icon: theme() === "dark" ? "☀️" : "🌙",
-        action: () => setTheme(theme() === "dark" ? "light" : "dark"),
+        label: isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
+        icon: isDark ? "☀️" : "🌙",
+        action: () => setActiveTheme(isDark ? "light" : "dark"),
       },
       { label: "Change Wallpaper", icon: "🖼️", action: () => {} },
       { separator: true, label: "" },

@@ -1,5 +1,10 @@
-export const darkTheme = {
-  name: "dark",
+import type { CloudOSTheme } from "../types";
+
+export const darkTheme: CloudOSTheme = {
+  id: "dark",
+  name: "Dark",
+  kind: "builtin",
+  base: "dark",
   colors: {
     "--color-os-bg": "#1a1a2e",
     "--color-os-surface": "rgba(255, 255, 255, 0.08)",

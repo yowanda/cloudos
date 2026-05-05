@@ -1,5 +1,18 @@
 import { Component, For, createMemo, createSignal, Show, onCleanup, onMount } from "solid-js";
-import { theme, setTheme, accentColor, setAccentColor, wallpaper, setWallpaper } from "../stores/theme-store";
+import {
+  theme,
+  setTheme,
+  accentColor,
+  setAccentColor,
+  wallpaper,
+  setWallpaper,
+  availableThemes,
+  setActiveTheme,
+  exportThemeToJSON,
+  importThemeFromJSON,
+  removeCustomTheme,
+} from "../stores/theme-store";
+import type { CloudOSTheme } from "../theme/types";
 import { vfsStats, formatSize, emptyTrash, subscribeTrash, type VFSStats } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
 import { profile, updateProfile, resetProfile } from "../stores/profile-store";
@@ -63,6 +76,135 @@ const wallpapers = [
   { name: "Midnight", value: "linear-gradient(135deg, #020024 0%, #090979 50%, #00d4ff 100%)", preview: "linear-gradient(135deg, #020024, #090979, #00d4ff)" },
   { name: "Rose", value: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)", preview: "linear-gradient(135deg, #ffecd2, #fcb69f)" },
 ];
+
+const ThemePicker: Component = () => {
+  const isActive = (t: CloudOSTheme) => theme() === t.id;
+  const swatchBg = (t: CloudOSTheme) => t.preview ?? t.colors["--color-os-bg"] ?? "#000";
+
+  return (
+    <div class="mb-6">
+      <label class="text-os-text-muted mb-2 block">Theme</label>
+      <div class="grid grid-cols-3 gap-2">
+        <For each={availableThemes()}>
+          {(t) => (
+            <div
+              class="relative flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors cursor-pointer"
+              classList={{
+                "border-os-accent bg-os-accent/10": isActive(t),
+                "border-os-border hover:border-os-accent/50": !isActive(t),
+              }}
+              onClick={() => setActiveTheme(t.id)}
+              title={`${t.name} (${t.kind})`}
+            >
+              <div
+                class="w-full h-12 rounded border border-os-border"
+                style={{ background: swatchBg(t) }}
+              />
+              <span class="text-[11px] text-center truncate w-full">{t.name}</span>
+              <Show when={t.kind === "custom"}>
+                <button
+                  class="absolute top-1 right-1 w-5 h-5 rounded-full bg-os-danger/80 text-white text-[10px] flex items-center justify-center hover:bg-os-danger transition-colors"
+                  title="Delete custom theme"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete theme "${t.name}"?`)) {
+                      removeCustomTheme(t.id);
+                      notify({
+                        title: "Theme removed",
+                        message: `Deleted custom theme "${t.name}"`,
+                        type: "info",
+                        icon: "🎨",
+                      });
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+};
+
+const ThemeImportExport: Component = () => {
+  let fileInput: HTMLInputElement | undefined;
+
+  const handleImport = async (file: File) => {
+    const text = await file.text();
+    const r = importThemeFromJSON(text);
+    if (!r.ok) {
+      notify({
+        title: "Theme import failed",
+        message: r.reason ?? "Unknown error",
+        type: "error",
+        icon: "🎨",
+      });
+      return;
+    }
+    if (r.id) setActiveTheme(r.id);
+    notify({
+      title: "Theme imported",
+      message: r.id ? `Activated "${r.id}"` : "Theme added to picker",
+      type: "success",
+      icon: "🎨",
+    });
+  };
+
+  const handleExport = async () => {
+    const json = exportThemeToJSON(theme());
+    if (!json) return;
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cloudos-theme-${theme()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    notify({
+      title: "Theme exported",
+      message: `Downloaded "${theme()}" as JSON`,
+      type: "success",
+      icon: "📥",
+    });
+  };
+
+  return (
+    <div class="mb-6">
+      <label class="text-os-text-muted mb-2 block">Theme JSON</label>
+      <div class="flex gap-2">
+        <button
+          class="flex-1 px-3 py-2 rounded-md bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors text-xs"
+          onClick={() => fileInput?.click()}
+        >
+          📤 Import theme…
+        </button>
+        <button
+          class="flex-1 px-3 py-2 rounded-md bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors text-xs"
+          onClick={handleExport}
+        >
+          📥 Export current
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          class="hidden"
+          onChange={(e) => {
+            const f = e.currentTarget.files?.[0];
+            if (f) void handleImport(f);
+            e.currentTarget.value = "";
+          }}
+        />
+      </div>
+      <p class="text-[10px] text-os-text-muted mt-2 leading-relaxed">
+        Themes are CloudOS JSON: <code>id</code>, <code>name</code>, <code>base</code>, <code>wallpaper</code>, and a <code>colors</code> map of CSS variables. Built-in ids (<code>dark</code>, <code>light</code>, <code>solarized-dark</code>, <code>solarized-light</code>, <code>nord</code>) are reserved.
+      </p>
+    </div>
+  );
+};
 
 const Settings: Component<{ windowId: string }> = () => {
   const [page, setPage] = createSignal<SettingsPage>("appearance");
@@ -133,34 +275,11 @@ const Settings: Component<{ windowId: string }> = () => {
         <Show when={page() === "appearance"}>
           <h2 class="text-sm font-semibold mb-4">Appearance</h2>
 
-          {/* Theme */}
-          <div class="mb-6">
-            <label class="text-os-text-muted mb-2 block">Theme</label>
-            <div class="flex gap-2">
-              <button
-                class="flex-1 flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors"
-                classList={{
-                  "border-os-accent bg-os-accent/10": theme() === "dark",
-                  "border-os-border hover:border-os-accent/50": theme() !== "dark",
-                }}
-                onClick={() => setTheme("dark")}
-              >
-                <div class="w-full h-12 rounded bg-[#1a1a2e] border border-[#333]" />
-                <span>Dark</span>
-              </button>
-              <button
-                class="flex-1 flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors"
-                classList={{
-                  "border-os-accent bg-os-accent/10": theme() === "light",
-                  "border-os-border hover:border-os-accent/50": theme() !== "light",
-                }}
-                onClick={() => setTheme("light")}
-              >
-                <div class="w-full h-12 rounded bg-[#f0f4f8] border border-[#ddd]" />
-                <span>Light</span>
-              </button>
-            </div>
-          </div>
+          {/* Theme picker — built-in + custom (JSON-imported) */}
+          <ThemePicker />
+
+          {/* Theme JSON import/export */}
+          <ThemeImportExport />
 
           {/* Accent Color */}
           <div class="mb-6">
