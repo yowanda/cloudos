@@ -39,6 +39,11 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### File sharing
+- Per-file Share dialog (right-click any file → **Share...**) with permissions (`read` / `comment` / `write`), optional expiry (1h, 1d, 7d, 30d, never), and optional password.
+- Local-only share links (`?share=<token>`) viewable in any browser tab via a built-in **Shared file viewer** that handles password unlock and expiry checks.
+- Backend endpoints (`POST/GET/DELETE /api/v1/shares`, `GET /api/v1/shares/by-token/:token`) ready for multi-user deployment.
+
 ### Storage backends
 The VFS supports three pluggable backends (Settings → Backend):
 - **In-memory** (default) — fast, data lives in the tab.

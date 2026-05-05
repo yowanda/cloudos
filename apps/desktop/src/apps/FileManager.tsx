@@ -17,6 +17,7 @@ import {
 import { showContextMenu } from "../stores/contextmenu-store";
 import { openWindow } from "../stores/window-store";
 import { notify } from "../stores/notification-store";
+import ShareDialog from "../shell/ShareDialog";
 
 const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
   const icon = () => {
@@ -42,6 +43,7 @@ const FileManager: Component<{ windowId: string }> = () => {
   const [renamingPath, setRenamingPath] = createSignal<string | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [isDragOver, setIsDragOver] = createSignal(false);
+  const [sharingEntry, setSharingEntry] = createSignal<VFSEntry | null>(null);
 
   const inTrash = () => currentPath() === "/Trash";
 
@@ -137,20 +139,28 @@ const FileManager: Component<{ windowId: string }> = () => {
 
     if (entry) {
       setSelectedPath(entry.path);
-      showContextMenu(e.clientX, e.clientY, [
+      const items = [
         { label: "Open", icon: "📂", action: () => handleDoubleClick(entry) },
         { label: "Rename", icon: "✏️", action: () => { setRenamingPath(entry.path); setRenameValue(entry.name); } },
-        { separator: true, label: "" },
-        {
-          label: "Move to Trash",
-          icon: "🗑️",
-          action: () => {
-            moveToTrash(entry.path);
-            refresh();
-            notify({ title: "Moved to Trash", message: entry.name, type: "info", icon: "🗑️" });
-          },
+      ];
+      if (!entry.isDir) {
+        items.push({
+          label: "Share...",
+          icon: "🔗",
+          action: () => setSharingEntry(entry),
+        });
+      }
+      items.push({ separator: true, label: "", action: () => {} } as never);
+      items.push({
+        label: "Move to Trash",
+        icon: "🗑️",
+        action: () => {
+          moveToTrash(entry.path);
+          refresh();
+          notify({ title: "Moved to Trash", message: entry.name, type: "info", icon: "🗑️" });
         },
-      ]);
+      });
+      showContextMenu(e.clientX, e.clientY, items);
     } else {
       showContextMenu(e.clientX, e.clientY, [
         { label: "New Folder", icon: "📁", action: () => { createDir(currentPath(), "New Folder"); refresh(); } },
@@ -467,6 +477,16 @@ const FileManager: Component<{ windowId: string }> = () => {
           </Show>
         </div>
       </div>
+
+      <Show when={sharingEntry()}>
+        {(entry) => (
+          <ShareDialog
+            filePath={entry().path}
+            fileName={entry().name}
+            onClose={() => setSharingEntry(null)}
+          />
+        )}
+      </Show>
     </div>
   );
 };

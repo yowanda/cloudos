@@ -21,9 +21,15 @@ import { WorkspaceOverlay } from "./shell/WorkspaceSwitcher";
 import { desktops, nextDesktop, prevDesktop, switchDesktop } from "./stores/desktop-store";
 import { attachAudioUnlock } from "./core/sound-manager";
 import { initVfsSync } from "./vfs/sync";
+import SharedFileViewer from "./shell/SharedFileViewer";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
+  const [shareToken, setShareToken] = createSignal<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("share");
+  });
 
   onMount(() => {
     registerAllApps();
@@ -145,6 +151,21 @@ const App: Component = () => {
         <Dock />
         <WorkspaceOverlay />
         <LockScreen />
+        <Show when={shareToken()}>
+          {(t) => (
+            <SharedFileViewer
+              token={t()}
+              onDismiss={() => {
+                setShareToken(null);
+                if (typeof window !== "undefined") {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete("share");
+                  window.history.replaceState({}, "", url.toString());
+                }
+              }}
+            />
+          )}
+        </Show>
       </div>
     </ThemeProvider>
   );

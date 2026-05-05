@@ -41,6 +41,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	fileHandler := handlers.NewFileHandler(fileService)
 	vfsHandler := handlers.NewVFSHandler("data/vfs")
+	shareHandler := handlers.NewShareHandler(database.DB)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -91,6 +92,12 @@ func main() {
 	protected.Get("/vfs/snapshot", vfsHandler.GetSnapshot)
 	protected.Put("/vfs/snapshot", vfsHandler.PutSnapshot)
 	protected.Delete("/vfs/snapshot", vfsHandler.DeleteSnapshot)
+
+	// File sharing
+	api.Get("/shares/by-token/:token", shareHandler.GetByToken)
+	protected.Post("/shares", shareHandler.Create)
+	protected.Get("/shares", shareHandler.List)
+	protected.Delete("/shares/:id", shareHandler.Revoke)
 
 	log.Printf("CloudOS Server starting on :%s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

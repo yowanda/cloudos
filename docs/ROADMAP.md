@@ -128,11 +128,11 @@
   - [x] Browser ↔ cloud snapshot sync (push + pull)
   - [ ] Per-entry diff sync / conflict resolution
   - [ ] Offline support (Service Worker)
-- [ ] File sharing
+- [x] File sharing
   - [x] DB schema for shares (share token, permission, expiry)
-  - [ ] Public share links (with expiry)
-  - [ ] User-to-user sharing (read/write)
-  - [ ] Share dialog UI
+  - [x] Public share links (with expiry, optional password)
+  - [x] User-to-user sharing (read/comment/write permission tiers)
+  - [x] Share dialog UI (per-file, list/create/revoke, copy link)
 - [ ] Search
   - [ ] Meilisearch integration
   - [ ] Full-text file search
