@@ -39,6 +39,11 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### Search (Spotlight)
+- **Ctrl+K** (or **Ctrl+Space**, or the magnifier in the taskbar) opens a Spotlight-style overlay.
+- Searches **apps + manifests + files (name & content)** with arrow-key navigation, ranked by exact/prefix/token/contains scoring.
+- Optional **Meilisearch** backend (`apps/desktop/src/core/search.ts`'s `searchMeili`) — point it at `https://meili.example/indexes/<name>/search` for remote-indexed search of larger corpora.
+
 ### File sharing
 - Per-file Share dialog (right-click any file → **Share...**) with permissions (`read` / `comment` / `write`), optional expiry (1h, 1d, 7d, 30d, never), and optional password.
 - Local-only share links (`?share=<token>`) viewable in any browser tab via a built-in **Shared file viewer** that handles password unlock and expiry checks.

@@ -133,10 +133,11 @@
   - [x] Public share links (with expiry, optional password)
   - [x] User-to-user sharing (read/comment/write permission tiers)
   - [x] Share dialog UI (per-file, list/create/revoke, copy link)
-- [ ] Search
-  - [ ] Meilisearch integration
-  - [ ] Full-text file search
-  - [ ] Search UI in taskbar
+- [x] Search
+  - [x] Built-in local index (file name + content + apps + manifests)
+  - [x] Optional Meilisearch integration (`searchMeili`, config in localStorage)
+  - [x] Full-text file search via Spotlight overlay
+  - [x] Search UI in taskbar (button + Ctrl+K / Ctrl+Space shortcut)
 - [x] Storage management
   - [x] Usage dashboard (Settings → Storage: per-folder breakdown, file/folder counts)
   - [x] Trash / recycle bin (move to trash, restore, permanent delete, empty trash, persisted)

@@ -1,6 +1,7 @@
 import { Component, For, Show, createSignal, createEffect, onCleanup } from "solid-js";
 import { currentDesktopWindows, windowStore, focusWindow, minimizeWindow } from "../stores/window-store";
 import { toggleStartMenu, startMenuOpen } from "../stores/startmenu-store";
+import { openSpotlight } from "./Spotlight";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { toggleNotificationCenter, unreadCount } from "../stores/notification-store";
 import { WorkspaceTrayButton } from "./WorkspaceSwitcher";
@@ -67,6 +68,18 @@ const Taskbar: Component = () => {
           <rect x="9" y="9" width="6" height="6" rx="1" />
         </svg>
         <span>Apps</span>
+      </button>
+
+      <button
+        class="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs text-os-text-muted hover:bg-os-surface-hover transition-colors"
+        title="Spotlight (Ctrl+K)"
+        onClick={() => openSpotlight()}
+      >
+        <span>🔍</span>
+        <span class="hidden md:inline">Search</span>
+        <kbd class="hidden md:inline px-1 text-[9px] rounded bg-os-surface border border-os-border">
+          Ctrl K
+        </kbd>
       </button>
 
       <div class="w-px h-5 bg-os-border mx-1" />

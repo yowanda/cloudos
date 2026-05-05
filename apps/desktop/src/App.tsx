@@ -22,6 +22,7 @@ import { desktops, nextDesktop, prevDesktop, switchDesktop } from "./stores/desk
 import { attachAudioUnlock } from "./core/sound-manager";
 import { initVfsSync } from "./vfs/sync";
 import SharedFileViewer from "./shell/SharedFileViewer";
+import { Spotlight, openSpotlight } from "./shell/Spotlight";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
@@ -81,6 +82,22 @@ const App: Component = () => {
       ctrl: true,
       handler: lockScreen,
       description: "Lock screen",
+    });
+
+    // Ctrl+K / Ctrl+Space: open Spotlight search
+    registerShortcut({
+      id: "system.spotlight",
+      key: "k",
+      ctrl: true,
+      handler: openSpotlight,
+      description: "Open Spotlight search",
+    });
+    registerShortcut({
+      id: "system.spotlight.alt",
+      key: " ",
+      ctrl: true,
+      handler: openSpotlight,
+      description: "Open Spotlight search",
     });
 
     // Ctrl+Alt+Right / Left: cycle workspaces
@@ -151,6 +168,7 @@ const App: Component = () => {
         <Dock />
         <WorkspaceOverlay />
         <LockScreen />
+        <Spotlight />
         <Show when={shareToken()}>
           {(t) => (
             <SharedFileViewer
