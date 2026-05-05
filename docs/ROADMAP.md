@@ -56,15 +56,16 @@
   - [x] Breadcrumb navigation
   - [x] Sidebar (favorites, tree view)
   - [x] File operations (create, rename, delete, copy, move)
-  - [ ] Drag & drop (within + upload from host)
+  - [x] Drag & drop upload from host
   - [ ] File preview panel (quick look)
-  - [ ] Upload/download files
+  - [ ] Drag & drop within app
 - [x] Terminal
   - [x] Shell emulation with built-in commands
   - [ ] xterm.js integration (needs backend)
   - [ ] WebSocket ↔ PTY bridge (backend)
-  - [ ] Multi-tab support
+  - [x] Multi-tab support
   - [x] Terminal color themes
+  - [x] cd, history, uptime commands
   - [ ] Copy/paste support
 - [x] Text Editor
   - [x] Code editor with line numbers
@@ -79,7 +80,7 @@
   - [ ] Support: PNG, JPG, GIF, WebP, SVG
 - [x] Settings App
   - [x] Appearance (theme, accent color)
-  - [ ] Wallpaper picker
+  - [x] Wallpaper picker (12 gradient wallpapers)
   - [ ] Account (profile, password)
   - [ ] Storage (usage, quota)
   - [ ] Apps (installed, defaults)
@@ -88,9 +89,9 @@
 - [x] Calculator app
 - [x] Browser app (iframe-based)
 - [x] Notes app
-- [ ] Notification system
-  - [ ] Toast notifications
-  - [ ] Notification center panel
+- [x] Notification system
+  - [x] Toast notifications
+  - [x] Notification center panel
   - [ ] Permission-based per app
 
 ---
@@ -177,10 +178,10 @@
 - [ ] Advanced features
   - [ ] Multi-desktop workspace UI
   - [ ] Custom keyboard shortcut editor
-  - [ ] Widget system (desktop widgets)
+  - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
   - [ ] Drag & drop between windows
   - [ ] System sounds
-  - [ ] Boot animation / splash screen
+  - [x] Boot animation / splash screen
 
 ---
 
