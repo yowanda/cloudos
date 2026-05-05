@@ -44,7 +44,7 @@
 │                                                                     │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────────────────┐  │
 │  │  API Gateway │  │  WebSocket   │  │  Auth Service             │  │
-│  │  (Hono/Go)  │  │  Server      │  │  (JWT + OAuth2)           │  │
+│  │  (Go+Fiber) │  │  Server      │  │  (JWT + bcrypt)           │  │
 │  │             │  │              │  │  ┌─────┐ ┌─────┐ ┌─────┐  │  │
 │  │  /api/v1/*  │  │  - Terminal  │  │  │Email│ │OAuth│ │Magic│  │  │
 │  │  /auth/*    │  │  - File Sync │  │  │     │ │     │ │Link │  │  │

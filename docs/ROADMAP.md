@@ -99,10 +99,25 @@
 
 **Goal:** Cloud storage dan file sharing.
 
-- [ ] MinIO integration
-  - [ ] S3-compatible object storage setup
-  - [ ] File upload/download via presigned URLs
+- [x] Backend server (Go + Fiber)
+  - [x] REST API with Fiber framework
+  - [x] GORM + PostgreSQL database
+  - [x] Auto-migration for all models
+  - [x] Docker Compose full stack
+- [x] Auth system
+  - [x] Register + Login API (bcrypt + JWT)
+  - [x] Auth middleware (Bearer token)
+  - [x] Lock Screen UI (frontend)
+  - [x] Session restore from localStorage
+- [x] MinIO integration
+  - [x] S3-compatible object storage setup
+  - [x] File upload/download via presigned URLs
   - [ ] Storage quota enforcement
+- [x] File API
+  - [x] List directory, create directory
+  - [x] Upload file, download (presigned URL)
+  - [x] Delete file/directory
+  - [x] Rename file
 - [ ] Virtual File System (VFS)
   - [ ] OPFS adapter (local browser storage)
   - [ ] S3 adapter (remote cloud storage)
@@ -112,6 +127,7 @@
   - [ ] Conflict resolution
   - [ ] Offline support (Service Worker)
 - [ ] File sharing
+  - [x] DB schema for shares (share token, permission, expiry)
   - [ ] Public share links (with expiry)
   - [ ] User-to-user sharing (read/write)
   - [ ] Share dialog UI
