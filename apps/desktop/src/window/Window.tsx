@@ -1,5 +1,7 @@
 import { Component, Show, createSignal } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import type { WindowConfig, SnapZone } from "@cloudos/shared";
+import { getAppComponent } from "../core/app-registry";
 import {
   closeWindow,
   focusWindow,
@@ -163,11 +165,19 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
       </div>
 
       {/* Content */}
-      <div class="flex-1 bg-os-window overflow-auto" style={{ height: `calc(100% - 32px)` }}>
-        <div class="p-4 text-sm text-os-text-muted">
-          <p>{props.config.title}</p>
-          <p class="text-xs mt-1 opacity-50">App: {props.config.appId}</p>
-        </div>
+      <div class="bg-os-window overflow-auto" style={{ height: `calc(100% - 32px)` }}>
+        {(() => {
+          const AppComp = getAppComponent(props.config.appId);
+          if (AppComp) {
+            return <Dynamic component={AppComp} windowId={props.config.id} />;
+          }
+          return (
+            <div class="p-4 text-sm text-os-text-muted">
+              <p>{props.config.title}</p>
+              <p class="text-xs mt-1 opacity-50">App: {props.config.appId}</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Resize Handles */}

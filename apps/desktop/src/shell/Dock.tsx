@@ -7,14 +7,17 @@ interface DockItem {
   id: string;
   name: string;
   icon: string;
+  width?: number;
+  height?: number;
+  resizable?: boolean;
 }
 
 const defaultDockItems: DockItem[] = [
-  { id: "com.cloudos.files", name: "Files", icon: "📁" },
-  { id: "com.cloudos.terminal", name: "Terminal", icon: "⬛" },
-  { id: "com.cloudos.editor", name: "Editor", icon: "📝" },
-  { id: "com.cloudos.browser", name: "Browser", icon: "🌐" },
-  { id: "com.cloudos.settings", name: "Settings", icon: "⚙️" },
+  { id: "com.cloudos.files", name: "Files", icon: "📁", width: 850, height: 550 },
+  { id: "com.cloudos.terminal", name: "Terminal", icon: "⬛", width: 700, height: 450 },
+  { id: "com.cloudos.editor", name: "Editor", icon: "📝", width: 750, height: 520 },
+  { id: "com.cloudos.browser", name: "Browser", icon: "🌐", width: 900, height: 600 },
+  { id: "com.cloudos.settings", name: "Settings", icon: "⚙️", width: 600, height: 450 },
 ];
 
 const Dock: Component = () => {
@@ -30,6 +33,8 @@ const Dock: Component = () => {
         appId: item.id,
         title: item.name,
         icon: item.icon,
+        width: item.width,
+        height: item.height,
       });
     }
   };

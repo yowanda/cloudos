@@ -1,0 +1,20 @@
+import { registerAppComponent } from "../core/app-registry";
+import FileManager from "./FileManager";
+import Terminal from "./Terminal";
+import TextEditor from "./TextEditor";
+import Settings from "./Settings";
+import Calculator from "./Calculator";
+import ImageViewer from "./ImageViewer";
+import Browser from "./Browser";
+import Notes from "./Notes";
+
+export function registerAllApps() {
+  registerAppComponent("com.cloudos.files", FileManager);
+  registerAppComponent("com.cloudos.terminal", Terminal);
+  registerAppComponent("com.cloudos.editor", TextEditor);
+  registerAppComponent("com.cloudos.settings", Settings);
+  registerAppComponent("com.cloudos.calculator", Calculator);
+  registerAppComponent("com.cloudos.imageviewer", ImageViewer);
+  registerAppComponent("com.cloudos.browser", Browser);
+  registerAppComponent("com.cloudos.notes", Notes);
+}

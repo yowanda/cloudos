@@ -10,9 +10,11 @@ import { ThemeProvider } from "./theme/theme-provider";
 import { registerShortcut, initShortcuts } from "./core/shortcut-manager";
 import { toggleStartMenu } from "./stores/startmenu-store";
 import { windowStore, minimizeWindow } from "./stores/window-store";
+import { registerAllApps } from "./apps";
 
 const App: Component = () => {
   onMount(() => {
+    registerAllApps();
     // Alt+Tab: Window switcher
     registerShortcut({
       key: "Tab",
