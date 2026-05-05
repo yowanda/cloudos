@@ -39,6 +39,10 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### File Manager extras
+- **Quick Look** — click the 👁️ button in the toolbar (or after selecting a file) to slide out a preview pane with the file icon, MIME type, size, modified time, and inline content for text / JSON / SVG. Folders show their child count.
+- **Drag-to-move** — drag a file or folder onto any folder (in the file listing **or** in the left sidebar) to move it. The drop target glows with the accent color, the source row dims while dragging, and a notification confirms the move.
+
 ### Deployment & Ops
 - **CI** (`.github/workflows/ci.yml`) builds the frontend + Go backend on every PR; on `main` it also builds both Docker images.
 - **Release** (`.github/workflows/release.yml`) on `v*.*.*` tags publishes images to `ghcr.io/<owner>/cloudos-{server,desktop}` and creates a GitHub Release with auto-generated changelog.

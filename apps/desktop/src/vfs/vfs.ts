@@ -337,6 +337,52 @@ export function vfsStats(): VFSStats {
   };
 }
 
+/**
+ * Move an entry into the directory at `destDirPath`. Works for files and
+ * directories (recursively rewrites all descendants' paths). Returns the
+ * moved entry, or undefined if the source doesn't exist or destination is
+ * not a directory or move would be a no-op.
+ */
+export function moveEntry(srcPath: string, destDirPath: string): VFSEntry | undefined {
+  const src = fileSystem.get(srcPath);
+  if (!src) return undefined;
+  const dest = fileSystem.get(destDirPath);
+  if (!dest || !dest.isDir) return undefined;
+
+  // Disallow moving an entry into itself or one of its descendants.
+  if (destDirPath === srcPath || destDirPath.startsWith(srcPath + "/")) return undefined;
+
+  const newPath = destDirPath === "/" ? `/${src.name}` : `${destDirPath}/${src.name}`;
+  if (newPath === srcPath) return undefined;
+  if (fileSystem.has(newPath)) return undefined; // name collision, refuse silently
+
+  if (src.isDir) {
+    // Rewrite the dir + every descendant key.
+    const entries: Array<[string, VFSEntry]> = [];
+    for (const [path, entry] of fileSystem.entries()) {
+      if (path === srcPath || path.startsWith(srcPath + "/")) {
+        entries.push([path, entry]);
+      }
+    }
+    for (const [path] of entries) fileSystem.delete(path);
+    for (const [oldP, entry] of entries) {
+      const rest = oldP.slice(srcPath.length); // includes leading slash for descendants, "" for root
+      const updatedPath = newPath + rest;
+      entry.path = updatedPath;
+      if (oldP === srcPath) entry.path = newPath;
+      entry.updatedAt = Date.now();
+      fileSystem.set(entry.path, entry);
+    }
+  } else {
+    fileSystem.delete(srcPath);
+    src.path = newPath;
+    src.updatedAt = Date.now();
+    fileSystem.set(newPath, src);
+  }
+  notifyFs();
+  return fileSystem.get(newPath);
+}
+
 export function renameEntry(oldPath: string, newName: string): VFSEntry | undefined {
   const entry = fileSystem.get(oldPath);
   if (!entry) return undefined;

@@ -57,8 +57,8 @@
   - [x] Sidebar (favorites, tree view)
   - [x] File operations (create, rename, delete, copy, move)
   - [x] Drag & drop upload from host
-  - [ ] File preview panel (quick look)
-  - [ ] Drag & drop within app
+  - [x] File preview panel (quick look) — toolbar 👁️ toggle, right pane shows file icon + metadata + inline content (text, JSON, SVG; placeholder for image/video/audio)
+  - [x] Drag & drop within app — drag any entry onto another folder (in the listing or sidebar) to move; visual ring highlights the drop target, source dims to 50%
 - [x] Terminal
   - [x] Shell emulation with built-in commands
   - [ ] xterm.js integration (needs backend)

@@ -4,6 +4,7 @@ import {
   createFile,
   createDir,
   renameEntry,
+  moveEntry,
   formatSize,
   moveToTrash,
   listTrash,
@@ -11,6 +12,7 @@ import {
   permanentDelete,
   emptyTrash,
   subscribeTrash,
+  getEntry,
   type VFSEntry,
   type TrashEntry,
 } from "../vfs/vfs";
@@ -44,6 +46,12 @@ const FileManager: Component<{ windowId: string }> = () => {
   const [renameValue, setRenameValue] = createSignal("");
   const [isDragOver, setIsDragOver] = createSignal(false);
   const [sharingEntry, setSharingEntry] = createSignal<VFSEntry | null>(null);
+  // Drag-to-move source path (when set, indicates an internal drag is in flight)
+  const [dragSrc, setDragSrc] = createSignal<string | null>(null);
+  // Folder path currently being hovered as a drop target during an internal drag
+  const [dropTargetPath, setDropTargetPath] = createSignal<string | null>(null);
+  // Right-side preview / Quick Look pane
+  const [previewOpen, setPreviewOpen] = createSignal(false);
 
   const inTrash = () => currentPath() === "/Trash";
 
@@ -200,6 +208,88 @@ const FileManager: Component<{ windowId: string }> = () => {
     { name: "Videos", path: "/Videos", icon: "🎬" },
   ];
 
+  // Drag handlers for moving items within the file manager.
+  const handleEntryDragStart = (e: DragEvent, entry: VFSEntry) => {
+    if (inTrash()) return;
+    e.dataTransfer?.setData("application/x-cloudos-vfs-path", entry.path);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    setDragSrc(entry.path);
+  };
+  const handleEntryDragEnd = () => {
+    setDragSrc(null);
+    setDropTargetPath(null);
+  };
+  const handleFolderDragOver = (e: DragEvent, folderPath: string) => {
+    if (!dragSrc()) return; // not an internal drag
+    if (folderPath === dragSrc()) return; // can't drop on self
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    setDropTargetPath(folderPath);
+  };
+  const handleFolderDrop = (e: DragEvent, folderPath: string) => {
+    const src = e.dataTransfer?.getData("application/x-cloudos-vfs-path");
+    if (!src) return; // external (file upload) — handled by parent
+    e.preventDefault();
+    e.stopPropagation();
+    setDragSrc(null);
+    setDropTargetPath(null);
+    if (src === folderPath) return;
+    const result = moveEntry(src, folderPath);
+    if (result) {
+      refresh();
+      const name = src.split("/").pop() ?? src;
+      notify({ title: "Moved", message: `${name} → ${folderPath}`, type: "success", icon: "↗️" });
+    } else {
+      notify({ title: "Move failed", message: "Name collision or invalid target", type: "warning", icon: "⚠️" });
+    }
+  };
+
+  const previewEntry = () => {
+    const p = selectedPath();
+    if (!p || inTrash()) return null;
+    return getEntry(p) ?? null;
+  };
+
+  const renderPreview = (entry: VFSEntry) => {
+    const mime = entry.mimeType;
+    const content = entry.content ?? "";
+    if (entry.isDir) {
+      const children = listDir(entry.path);
+      return (
+        <div class="text-[11px] text-os-text-muted">
+          Directory containing {children.length} item{children.length === 1 ? "" : "s"}.
+        </div>
+      );
+    }
+    if (mime.startsWith("image/")) {
+      // Inline preview for SVG; otherwise show placeholder (no blob storage yet).
+      if (mime === "image/svg+xml" && content) {
+        return <div class="bg-white p-2 rounded" innerHTML={content} />;
+      }
+      return (
+        <div class="flex items-center justify-center h-32 bg-os-surface rounded text-3xl">🖼️</div>
+      );
+    }
+    if (mime.startsWith("video/")) {
+      return (
+        <div class="flex items-center justify-center h-32 bg-os-surface rounded text-3xl">🎬</div>
+      );
+    }
+    if (mime.startsWith("audio/")) {
+      return (
+        <div class="flex items-center justify-center h-20 bg-os-surface rounded text-3xl">🎵</div>
+      );
+    }
+    if (mime.startsWith("text/") || mime === "application/json") {
+      return (
+        <pre class="text-[10px] leading-tight bg-os-surface rounded p-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">
+          {content || "(empty file)"}
+        </pre>
+      );
+    }
+    return <div class="text-[11px] text-os-text-muted">No preview available for {mime}.</div>;
+  };
+
   const formatTimeAgo = (ts: number) => {
     const diff = Date.now() - ts;
     const m = Math.floor(diff / 60000);
@@ -223,8 +313,12 @@ const FileManager: Component<{ windowId: string }> = () => {
               classList={{
                 "bg-os-accent/20 text-os-accent-hover": currentPath() === item.path,
                 "hover:bg-os-surface-hover text-os-text": currentPath() !== item.path,
+                "ring-1 ring-os-accent ring-offset-1 ring-offset-os-bg": dropTargetPath() === item.path,
               }}
               onClick={() => navigate(item.path)}
+              onDragOver={(e) => handleFolderDragOver(e, item.path)}
+              onDragLeave={() => setDropTargetPath((p) => (p === item.path ? null : p))}
+              onDrop={(e) => handleFolderDrop(e, item.path)}
             >
               <span class="text-sm">{item.icon}</span>
               <span>{item.name}</span>
@@ -287,6 +381,19 @@ const FileManager: Component<{ windowId: string }> = () => {
             title={viewMode() === "grid" ? "List view" : "Grid view"}
           >
             {viewMode() === "grid" ? "☰" : "⊞"}
+          </button>
+
+          {/* Quick Look toggle */}
+          <button
+            class="px-2 py-1 rounded transition-colors"
+            classList={{
+              "bg-os-accent/20 text-os-accent-hover": previewOpen(),
+              "hover:bg-os-surface-hover": !previewOpen(),
+            }}
+            onClick={() => setPreviewOpen(!previewOpen())}
+            title={previewOpen() ? "Hide preview" : "Show preview (Quick Look)"}
+          >
+            👁️
           </button>
         </div>
 
@@ -409,14 +516,22 @@ const FileManager: Component<{ windowId: string }> = () => {
               <For each={entries()}>
                 {(entry) => (
                   <div
+                    draggable={true}
                     class="flex flex-col items-center gap-1 p-2 rounded-lg cursor-pointer transition-colors"
                     classList={{
                       "bg-os-accent/20 ring-1 ring-os-accent/30": selectedPath() === entry.path,
-                      "hover:bg-os-surface-hover": selectedPath() !== entry.path,
+                      "hover:bg-os-surface-hover": selectedPath() !== entry.path && dropTargetPath() !== entry.path,
+                      "ring-2 ring-os-accent": dropTargetPath() === entry.path && entry.isDir,
+                      "opacity-50": dragSrc() === entry.path,
                     }}
                     onClick={(e) => { e.stopPropagation(); setSelectedPath(entry.path); }}
                     onDblClick={() => handleDoubleClick(entry)}
                     onContextMenu={(e) => handleContextMenu(e, entry)}
+                    onDragStart={(e) => handleEntryDragStart(e, entry)}
+                    onDragEnd={handleEntryDragEnd}
+                    onDragOver={(e) => entry.isDir && handleFolderDragOver(e, entry.path)}
+                    onDragLeave={() => setDropTargetPath((p) => (p === entry.path ? null : p))}
+                    onDrop={(e) => entry.isDir && handleFolderDrop(e, entry.path)}
                   >
                     <FileIcon entry={entry} />
                     <Show when={renamingPath() === entry.path} fallback={
@@ -448,14 +563,22 @@ const FileManager: Component<{ windowId: string }> = () => {
               <For each={entries()}>
                 {(entry) => (
                   <div
+                    draggable={true}
                     class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors"
                     classList={{
                       "bg-os-accent/20": selectedPath() === entry.path,
-                      "hover:bg-os-surface-hover": selectedPath() !== entry.path,
+                      "hover:bg-os-surface-hover": selectedPath() !== entry.path && dropTargetPath() !== entry.path,
+                      "ring-1 ring-os-accent ring-inset": dropTargetPath() === entry.path && entry.isDir,
+                      "opacity-50": dragSrc() === entry.path,
                     }}
                     onClick={(e) => { e.stopPropagation(); setSelectedPath(entry.path); }}
                     onDblClick={() => handleDoubleClick(entry)}
                     onContextMenu={(e) => handleContextMenu(e, entry)}
+                    onDragStart={(e) => handleEntryDragStart(e, entry)}
+                    onDragEnd={handleEntryDragEnd}
+                    onDragOver={(e) => entry.isDir && handleFolderDragOver(e, entry.path)}
+                    onDragLeave={() => setDropTargetPath((p) => (p === entry.path ? null : p))}
+                    onDrop={(e) => entry.isDir && handleFolderDrop(e, entry.path)}
                   >
                     <FileIcon entry={entry} />
                     <span class="flex-1 truncate">{entry.name}</span>
@@ -477,6 +600,51 @@ const FileManager: Component<{ windowId: string }> = () => {
           </Show>
         </div>
       </div>
+
+      {/* Preview / Quick Look pane */}
+      <Show when={previewOpen()}>
+        <div class="w-64 border-l border-os-border flex flex-col overflow-hidden flex-shrink-0">
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-os-border">
+            <span class="text-[11px] uppercase tracking-wider text-os-text-muted">Preview</span>
+            <button
+              class="px-1 rounded hover:bg-os-surface-hover transition-colors text-os-text-muted"
+              onClick={() => setPreviewOpen(false)}
+              title="Close preview"
+            >
+              ✕
+            </button>
+          </div>
+          <Show when={previewEntry()} fallback={
+            <div class="flex flex-col items-center justify-center flex-1 text-os-text-muted gap-2 text-[11px] px-4 text-center">
+              <span class="text-3xl opacity-40">👁️</span>
+              <span>Select a file or folder to preview it.</span>
+            </div>
+          }>
+            {(entry) => (
+              <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+                <div class="flex flex-col items-center gap-2 pb-2 border-b border-os-border">
+                  <span class="text-4xl"><FileIcon entry={entry()} /></span>
+                  <span class="text-[11px] font-medium break-all text-center">{entry().name}</span>
+                </div>
+                <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[10px]">
+                  <span class="text-os-text-muted">Type</span>
+                  <span class="break-all">{entry().isDir ? "Folder" : entry().mimeType}</span>
+                  <Show when={!entry().isDir}>
+                    <span class="text-os-text-muted">Size</span>
+                    <span>{formatSize(entry().size)}</span>
+                  </Show>
+                  <span class="text-os-text-muted">Path</span>
+                  <span class="break-all">{entry().path}</span>
+                  <span class="text-os-text-muted">Modified</span>
+                  <span>{new Date(entry().updatedAt).toLocaleString()}</span>
+                </div>
+                <div class="text-[10px] uppercase tracking-wider text-os-text-muted">Contents</div>
+                {renderPreview(entry())}
+              </div>
+            )}
+          </Show>
+        </div>
+      </Show>
 
       <Show when={sharingEntry()}>
         {(entry) => (
