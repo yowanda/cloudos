@@ -2,6 +2,7 @@ import { Component, For, Show, createSignal } from "solid-js";
 import { listDir, getEntry, createFile, createDir, deleteEntry, renameEntry, formatSize, type VFSEntry } from "../vfs/vfs";
 import { showContextMenu } from "../stores/contextmenu-store";
 import { openWindow } from "../stores/window-store";
+import { notify } from "../stores/notification-store";
 
 const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
   const icon = () => {
@@ -25,6 +26,7 @@ const FileManager: Component<{ windowId: string }> = () => {
   const [viewMode, setViewMode] = createSignal<"grid" | "list">("grid");
   const [renamingPath, setRenamingPath] = createSignal<string | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
+  const [isDragOver, setIsDragOver] = createSignal(false);
 
   const refresh = () => setEntries(listDir(currentPath()));
   refresh();
@@ -170,8 +172,33 @@ const FileManager: Component<{ windowId: string }> = () => {
 
         {/* File listing */}
         <div
-          class="flex-1 overflow-y-auto p-2"
+          class="flex-1 overflow-y-auto p-2 transition-colors"
+          classList={{ "bg-os-accent/10 ring-2 ring-inset ring-os-accent/30 rounded-lg": isDragOver() }}
           onContextMenu={(e) => handleContextMenu(e)}
+          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragOver(false);
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+              for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                reader.onload = () => {
+                  createFile(currentPath(), file.name, reader.result as string);
+                  refresh();
+                };
+                reader.readAsText(file);
+              }
+              notify({
+                title: "Files Uploaded",
+                message: `${files.length} file(s) added to ${currentPath()}`,
+                type: "success",
+                icon: "📁",
+              });
+            }
+          }}
         >
           <Show when={entries().length === 0}>
             <div class="flex items-center justify-center h-full text-os-text-muted">
