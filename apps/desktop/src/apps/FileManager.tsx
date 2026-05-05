@@ -21,6 +21,7 @@ import { openWindow } from "../stores/window-store";
 import { notify } from "../stores/notification-store";
 import ShareDialog from "../shell/ShareDialog";
 import { openImageInViewer } from "./ImageViewer";
+import { openInEditor } from "./TextEditor";
 
 const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
   const icon = () => {
@@ -109,12 +110,19 @@ const FileManager: Component<{ windowId: string }> = () => {
       return;
     }
     if (entry.mimeType.startsWith("text/") || entry.mimeType === "application/json") {
+      // Hand the editor the file content via the cross-window signal, then
+      // open the editor window. Mirrors the ImageViewer handoff pattern.
+      openInEditor({
+        path: entry.path,
+        name: entry.name,
+        content: entry.content ?? "",
+      });
       openWindow({
         appId: "com.cloudos.editor",
         title: entry.name,
         icon: "📝",
-        width: 700,
-        height: 500,
+        width: 760,
+        height: 540,
       });
     }
   };

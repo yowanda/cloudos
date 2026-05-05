@@ -182,6 +182,57 @@ export function createFile(path: string, name: string, content = ""): VFSEntry {
   return entry;
 }
 
+/**
+ * Upsert helper: write `content` to `fullPath`, creating the file (and any
+ * missing ancestor directories) if it doesn't yet exist. Returns the
+ * resulting entry. Refuses to overwrite a directory.
+ */
+export function writeFile(fullPath: string, content: string): VFSEntry | undefined {
+  if (!fullPath.startsWith("/")) fullPath = `/${fullPath}`;
+  const existing = fileSystem.get(fullPath);
+  if (existing && existing.isDir) return undefined;
+  const now = Date.now();
+  if (existing) {
+    existing.content = content;
+    existing.size = content.length;
+    existing.updatedAt = now;
+    fileSystem.set(fullPath, existing);
+    notifyFs();
+    return existing;
+  }
+  // Make sure ancestor directories exist (best effort — silently create).
+  const parts = fullPath.split("/").filter(Boolean);
+  const name = parts.pop() ?? "untitled";
+  let ancestor = "";
+  for (const seg of parts) {
+    ancestor = `${ancestor}/${seg}`;
+    if (!fileSystem.has(ancestor)) {
+      fileSystem.set(ancestor, {
+        name: seg,
+        path: ancestor,
+        isDir: true,
+        size: 0,
+        mimeType: "directory",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+  const entry: VFSEntry = {
+    name,
+    path: fullPath,
+    isDir: false,
+    size: content.length,
+    mimeType: guessMimeType(name),
+    content,
+    createdAt: now,
+    updatedAt: now,
+  };
+  fileSystem.set(fullPath, entry);
+  notifyFs();
+  return entry;
+}
+
 export function createDir(path: string, name: string): VFSEntry {
   const fullPath = path === "/" ? `/${name}` : `${path}/${name}`;
   const now = Date.now();

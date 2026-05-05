@@ -69,10 +69,12 @@
   - [ ] Copy/paste support
 - [x] Text Editor
   - [x] Code editor with line numbers
-  - [x] Multi-file tabs UI
+  - [x] Multi-file tabs UI (open, switch, close, scratch tabs)
   - [ ] Monaco Editor integration
-  - [ ] Syntax highlighting (auto-detect)
-  - [ ] Save to VFS
+  - [x] Syntax highlighting (auto-detect — JS/TS/JSON/Python/CSS/HTML/Markdown via `core/syntax.ts` regex tokenizer, transparent textarea over colored overlay)
+  - [x] Save to VFS (`Ctrl+S` via `vfs.writeFile()` upsert)
+  - [x] Find & replace (`Ctrl+F`)
+  - [x] Open from File Manager double-click via `openInEditor()` cross-window handoff
   - [x] Minimap placeholder
 - [x] Image Viewer (placeholder)
   - [x] Pan, zoom, rotate (mouse wheel zoom, click-drag pan, ↺/↻ rotate, R key, 0 reset)

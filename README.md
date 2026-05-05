@@ -27,7 +27,7 @@
 |-----|------------|
 | File Manager | Grid/list view, breadcrumbs, sidebar, create/rename/delete |
 | Terminal | Built-in shell with commands (ls, help, neofetch, echo, etc) |
-| Text Editor | Code editor with line numbers, multi-tab UI |
+| Text Editor | Real code editor — multi-tab, syntax highlighting (JS/TS/JSON/Python/CSS/HTML/Markdown), `Ctrl+S` saves to VFS, `Ctrl+N` new tab, `Ctrl+W` close, `Ctrl+F` find/replace, opens automatically when you double-click a text/JSON file in File Manager |
 | Browser | iframe-based web browser with URL bar |
 | Calculator | Fully functional calculator |
 | Settings | Theme toggle, accent color picker, system info |
@@ -44,6 +44,17 @@
 - **Account page** — Display name, email, avatar emoji, and bio, stored in `cloudos:profile`. Reset clears the entry.
 - **Apps page** — Lists installed manifest apps with icon, version, and category. One-click Launch / Uninstall. Recents history is also browsable + clearable here.
 - **Keyboard page** — Quick read-only summary of every registered shortcut with a "↻ reset" link for any custom binding; "Open Shortcuts app" for the full editor.
+
+### Text Editor
+Real code editor (replaces the old stub).
+
+- **Multi-tab UI** — open many files at once, click to switch, `✕` to close, `+` to add a scratch tab
+- **Syntax highlighting** — regex tokenizer in [`src/core/syntax.ts`](./apps/desktop/src/core/syntax.ts) handles JavaScript, TypeScript, JSON, Python, CSS, HTML and Markdown; renders as a colored overlay behind a transparent textarea with synced scrolling
+- **VFS save** — `Ctrl+S` writes the active tab back to its VFS path (or prompts for one for unsaved scratch tabs); creates ancestor folders as needed via `writeFile()`
+- **Find / Replace** — `Ctrl+F` opens an inline find bar with "Next" + "Replace all"
+- **Cross-window handoff** — File Manager double-click on a text/JSON file routes through `openInEditor()` (same pattern as `openImageInViewer`), pre-loading the content + path so save lands back in the right place
+
+Keyboard: `Ctrl+S` save · `Ctrl+N` new scratch tab · `Ctrl+W` close active tab · `Ctrl+F` find/replace · `Esc` close find bar.
 
 ### Image Viewer
 Real image-viewer app (replaces the old stub). Pan with click-drag, zoom with the mouse wheel or `+`/`−`, rotate with `R`, reset with `0`, navigate with `←`/`→`, slideshow with `Space`. Filmstrip thumbnails, status bar with zoom + rotation, URL input box, host drag-drop. When opened from File Manager, it auto-loads sibling images in the same folder so you can flip through a directory.
