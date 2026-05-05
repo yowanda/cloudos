@@ -20,6 +20,7 @@ import { DesktopWidgets } from "./shell/Widgets";
 import { WorkspaceOverlay } from "./shell/WorkspaceSwitcher";
 import { desktops, nextDesktop, prevDesktop, switchDesktop } from "./stores/desktop-store";
 import { attachAudioUnlock } from "./core/sound-manager";
+import { initVfsSync } from "./vfs/sync";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
@@ -27,6 +28,7 @@ const App: Component = () => {
   onMount(() => {
     registerAllApps();
     attachAudioUnlock();
+    void initVfsSync();
     // Alt+Tab: Window switcher
     registerShortcut({
       id: "system.switch-windows",

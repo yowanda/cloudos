@@ -11,7 +11,7 @@ import {
   type SoundName,
 } from "../core/sound-manager";
 
-type SettingsPage = "appearance" | "wallpaper" | "sound" | "storage" | "about";
+type SettingsPage = "appearance" | "wallpaper" | "sound" | "storage" | "backend" | "about";
 
 const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB demo quota
 
@@ -59,6 +59,7 @@ const Settings: Component<{ windowId: string }> = () => {
     { id: "wallpaper", label: "Wallpaper", icon: "🖼️" },
     { id: "sound", label: "Sound", icon: "🔊" },
     { id: "storage", label: "Storage", icon: "💾" },
+    { id: "backend", label: "Backend", icon: "🔗" },
     { id: "about", label: "About", icon: "ℹ️" },
   ];
 
@@ -350,6 +351,10 @@ const Settings: Component<{ windowId: string }> = () => {
           </div>
         </Show>
 
+        <Show when={page() === "backend"}>
+          <BackendPanel />
+        </Show>
+
         <Show when={page() === "about"}>
           <h2 class="text-sm font-semibold mb-4">About CloudOS</h2>
           <div class="space-y-3">
@@ -384,3 +389,131 @@ const Settings: Component<{ windowId: string }> = () => {
 };
 
 export default Settings;
+
+const BackendPanel: Component = () => {
+  const [backends, setBackends] = createSignal<{ id: string; displayName: string; available: boolean }[]>([]);
+  const [remoteCfg, setRemoteCfg] = createSignal<{ baseUrl: string; token: string }>({ baseUrl: "/api/v1", token: "" });
+
+  const refresh = async () => {
+    const { adapterStatuses } = await import("../vfs/sync");
+    const { loadRemoteConfig } = await import("../vfs/adapters/remote");
+    const list = await adapterStatuses();
+    setBackends(list.map((b) => ({ id: b.id, displayName: b.displayName, available: b.available })));
+    setRemoteCfg(loadRemoteConfig());
+  };
+
+  onMount(() => {
+    void refresh();
+  });
+
+  const switchTo = async (id: "memory" | "opfs" | "remote") => {
+    const { setBackend } = await import("../vfs/sync");
+    try {
+      await setBackend(id);
+      notify({ title: "Storage backend", message: `Switched to ${id}`, type: "success", icon: "💾" });
+      void refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify({ title: "Backend switch failed", message: msg, type: "error", icon: "💾" });
+    }
+  };
+
+  const syncNowClick = async () => {
+    const { syncNow } = await import("../vfs/sync");
+    await syncNow();
+    notify({ title: "Sync", message: "Pushed snapshot to backend", type: "success", icon: "💾" });
+  };
+
+  const pullClick = async () => {
+    const { pullFromBackend } = await import("../vfs/sync");
+    await pullFromBackend();
+    notify({ title: "Sync", message: "Pulled snapshot from backend", type: "success", icon: "💾" });
+  };
+
+  const saveRemote = async () => {
+    const { saveRemoteConfig } = await import("../vfs/adapters/remote");
+    saveRemoteConfig(remoteCfg());
+    notify({ title: "Remote config", message: "Saved", type: "info", icon: "🔗" });
+    void refresh();
+  };
+
+  return (
+    <div class="space-y-4 text-xs">
+      <h2 class="text-sm font-semibold">Storage Backend</h2>
+      <p class="text-os-text-muted">
+        Choose where to persist your virtual file system. The default is in-memory + browser
+        localStorage. Switch to OPFS for browser-native persistent files, or Remote to sync against
+        a CloudOS API server.
+      </p>
+
+      <div class="grid gap-2">
+        <For each={backends()}>
+          {(b) => (
+            <div
+              class="flex items-center justify-between p-3 rounded-lg border"
+              classList={{
+                "border-os-accent bg-os-accent/10": b.available,
+                "border-os-border opacity-60": !b.available,
+              }}
+            >
+              <div>
+                <div class="font-medium">{b.displayName}</div>
+                <div class="text-[10px] text-os-text-muted">
+                  {b.available ? "Available" : "Unavailable in this environment"}
+                </div>
+              </div>
+              <button
+                class="px-3 py-1 rounded bg-os-accent text-white disabled:opacity-30"
+                disabled={!b.available}
+                onClick={() => void switchTo(b.id as "memory" | "opfs" | "remote")}
+              >
+                Use
+              </button>
+            </div>
+          )}
+        </For>
+      </div>
+
+      <h3 class="text-xs font-semibold mt-4">Remote API config</h3>
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Base URL</span>
+        <input
+          type="text"
+          class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+          value={remoteCfg().baseUrl}
+          onInput={(e) => setRemoteCfg({ ...remoteCfg(), baseUrl: e.currentTarget.value })}
+        />
+      </label>
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Auth token (optional)</span>
+        <input
+          type="password"
+          class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+          value={remoteCfg().token}
+          onInput={(e) => setRemoteCfg({ ...remoteCfg(), token: e.currentTarget.value })}
+        />
+      </label>
+      <button
+        class="px-3 py-1.5 rounded bg-os-accent text-white"
+        onClick={() => void saveRemote()}
+      >
+        Save remote config
+      </button>
+
+      <div class="flex gap-2 pt-3 border-t border-os-border">
+        <button
+          class="px-3 py-1.5 rounded bg-os-surface border border-os-border hover:bg-os-surface-hover"
+          onClick={() => void syncNowClick()}
+        >
+          Push snapshot now
+        </button>
+        <button
+          class="px-3 py-1.5 rounded bg-os-surface border border-os-border hover:bg-os-surface-hover"
+          onClick={() => void pullClick()}
+        >
+          Pull snapshot from backend
+        </button>
+      </div>
+    </div>
+  );
+};

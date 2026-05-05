@@ -40,6 +40,7 @@ func main() {
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authService)
 	fileHandler := handlers.NewFileHandler(fileService)
+	vfsHandler := handlers.NewVFSHandler("data/vfs")
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -82,6 +83,14 @@ func main() {
 	protected.Get("/files/:id/download", fileHandler.Download)
 	protected.Delete("/files/:id", fileHandler.Delete)
 	protected.Patch("/files/:id/rename", fileHandler.Rename)
+
+	// VFS snapshot (used by the browser "remote" VFS adapter).
+	// Health endpoint is public so the browser can probe availability
+	// without first needing a token; snapshot read/write is protected.
+	api.Get("/vfs/health", vfsHandler.Health)
+	protected.Get("/vfs/snapshot", vfsHandler.GetSnapshot)
+	protected.Put("/vfs/snapshot", vfsHandler.PutSnapshot)
+	protected.Delete("/vfs/snapshot", vfsHandler.DeleteSnapshot)
 
 	log.Printf("CloudOS Server starting on :%s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

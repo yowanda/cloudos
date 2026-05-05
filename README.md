@@ -39,6 +39,12 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### Storage backends
+The VFS supports three pluggable backends (Settings → Backend):
+- **In-memory** (default) — fast, data lives in the tab.
+- **OPFS** — browser-native Origin Private File System, persists across reloads even when localStorage is cleared.
+- **Remote** — pushes a JSON snapshot to a CloudOS API server (`/api/v1/vfs/snapshot`), pulls on boot, debounced auto-save on every mutation.
+
 ### Cloud & Backend
 - **Go + Fiber** REST API backend
 - **PostgreSQL + GORM** database with auto-migration

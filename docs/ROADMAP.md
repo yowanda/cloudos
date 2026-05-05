@@ -119,13 +119,14 @@
   - [x] Upload file, download (presigned URL)
   - [x] Delete file/directory
   - [x] Rename file
-- [ ] Virtual File System (VFS)
-  - [ ] OPFS adapter (local browser storage)
-  - [ ] S3 adapter (remote cloud storage)
-  - [ ] Unified API layer
-- [ ] File sync
-  - [ ] Local ↔ cloud sync
-  - [ ] Conflict resolution
+- [x] Virtual File System (VFS)
+  - [x] OPFS adapter (browser-native persistent storage)
+  - [x] Remote API adapter (HTTP, snapshot push/pull)
+  - [x] In-memory adapter (default)
+  - [x] Unified switchable API layer (`vfs/sync.ts`) with debounced auto-save
+- [x] File sync
+  - [x] Browser ↔ cloud snapshot sync (push + pull)
+  - [ ] Per-entry diff sync / conflict resolution
   - [ ] Offline support (Service Worker)
 - [ ] File sharing
   - [x] DB schema for shares (share token, permission, expiry)

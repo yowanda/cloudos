@@ -21,14 +21,36 @@ export interface TrashEntry {
 const trash: Map<string, TrashEntry> = new Map();
 const TRASH_STORAGE_KEY = "cloudos:vfs:trash";
 const trashListeners = new Set<() => void>();
+const fsListeners = new Set<() => void>();
 
 function notifyTrash() {
   for (const fn of trashListeners) fn();
 }
 
+function notifyFs() {
+  for (const fn of fsListeners) fn();
+}
+
 export function subscribeTrash(fn: () => void): () => void {
   trashListeners.add(fn);
   return () => trashListeners.delete(fn);
+}
+
+export function subscribeFs(fn: () => void): () => void {
+  fsListeners.add(fn);
+  return () => fsListeners.delete(fn);
+}
+
+export function exportSnapshot(): VFSEntry[] {
+  return Array.from(fileSystem.values()).map((e) => ({ ...e }));
+}
+
+export function importSnapshot(entries: VFSEntry[]): void {
+  fileSystem.clear();
+  for (const e of entries) {
+    fileSystem.set(e.path, { ...e });
+  }
+  notifyFs();
 }
 
 function persistTrash() {
@@ -156,6 +178,7 @@ export function createFile(path: string, name: string, content = ""): VFSEntry {
     updatedAt: now,
   };
   fileSystem.set(fullPath, entry);
+  notifyFs();
   return entry;
 }
 
@@ -172,6 +195,7 @@ export function createDir(path: string, name: string): VFSEntry {
     updatedAt: now,
   };
   fileSystem.set(fullPath, entry);
+  notifyFs();
   return entry;
 }
 
@@ -180,6 +204,7 @@ export function deleteEntry(path: string) {
   for (const key of fileSystem.keys()) {
     if (key.startsWith(path + "/")) fileSystem.delete(key);
   }
+  notifyFs();
 }
 
 function uniqueTrashPath(name: string): string {
@@ -217,6 +242,7 @@ export function moveToTrash(path: string): TrashEntry | undefined {
   }
   persistTrash();
   notifyTrash();
+  notifyFs();
   return record;
 }
 
@@ -251,6 +277,7 @@ export function restoreFromTrash(trashPath: string): VFSEntry | undefined {
   trash.delete(trashPath);
   persistTrash();
   notifyTrash();
+  notifyFs();
   return restored;
 }
 
@@ -322,6 +349,7 @@ export function renameEntry(oldPath: string, newName: string): VFSEntry | undefi
   entry.path = newPath;
   entry.updatedAt = Date.now();
   fileSystem.set(newPath, entry);
+  notifyFs();
   return entry;
 }
 
