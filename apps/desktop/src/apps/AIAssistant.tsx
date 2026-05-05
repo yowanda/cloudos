@@ -1,6 +1,7 @@
 import { Component, For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import {
   cancelPendingConfirmation,
+  cancelPendingToolCall,
   config,
   conversations,
   currentConversationId,
@@ -9,6 +10,7 @@ import {
   pending,
   renameConversation,
   runPendingConfirmation,
+  runPendingToolCall,
   selectConversation,
   sendMessage,
   setConfig,
@@ -210,60 +212,133 @@ const AIAssistant: Component<{ windowId: string }> = () => {
             >
               <For each={current()!.messages}>
                 {(m) => (
-                  <div
-                    class="flex gap-2"
-                    classList={{
-                      "flex-row-reverse": m.role === "user",
-                    }}
+                  <Show
+                    when={m.role !== "tool"}
+                    fallback={
+                      <div class="flex gap-2 ml-9">
+                        <div class="max-w-[80%] rounded text-[10px] font-mono whitespace-pre-wrap break-words bg-os-surface/50 border border-os-border/40 px-2 py-1 text-os-text-muted">
+                          <span class="block text-[9px] uppercase tracking-wide opacity-70 mb-0.5">
+                            tool · {m.toolName ?? "(unknown)"}
+                          </span>
+                          {m.content || "(empty)"}
+                        </div>
+                      </div>
+                    }
                   >
                     <div
-                      class="w-7 h-7 rounded-full flex items-center justify-center text-base flex-shrink-0"
+                      class="flex gap-2"
                       classList={{
-                        "bg-os-accent text-white": m.role === "user",
-                        "bg-os-surface border border-os-border": m.role === "assistant",
+                        "flex-row-reverse": m.role === "user",
                       }}
                     >
-                      {m.role === "user" ? "🙂" : "🤖"}
-                    </div>
-                    <div
-                      class="max-w-[80%] rounded-lg px-3 py-2 whitespace-pre-wrap break-words flex flex-col gap-2"
-                      classList={{
-                        "bg-os-accent text-white": m.role === "user",
-                        "bg-os-surface border border-os-border": m.role === "assistant",
-                      }}
-                    >
-                      <span>{m.content}</span>
-                      <Show when={m.pendingConfirmation}>
-                        <div class="flex flex-col gap-1.5 pt-1.5 border-t border-os-border/60">
-                          <span class="text-[10px] text-amber-400">
-                            ⚠️ This action mutates your VFS.
-                          </span>
-                          <div class="flex gap-2">
-                            <button
-                              type="button"
-                              class="px-3 py-1 rounded text-[11px] bg-os-danger text-white hover:opacity-90 transition-opacity"
-                              onClick={() => {
-                                const convId = currentConversationId();
-                                if (convId) runPendingConfirmation(convId, m.id);
-                              }}
-                            >
-                              Run
-                            </button>
-                            <button
-                              type="button"
-                              class="px-3 py-1 rounded text-[11px] bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors"
-                              onClick={() => {
-                                const convId = currentConversationId();
-                                if (convId) cancelPendingConfirmation(convId, m.id);
-                              }}
-                            >
-                              Cancel
-                            </button>
+                      <div
+                        class="w-7 h-7 rounded-full flex items-center justify-center text-base flex-shrink-0"
+                        classList={{
+                          "bg-os-accent text-white": m.role === "user",
+                          "bg-os-surface border border-os-border": m.role === "assistant",
+                        }}
+                      >
+                        {m.role === "user" ? "🙂" : "🤖"}
+                      </div>
+                      <div
+                        class="max-w-[80%] rounded-lg px-3 py-2 whitespace-pre-wrap break-words flex flex-col gap-2"
+                        classList={{
+                          "bg-os-accent text-white": m.role === "user",
+                          "bg-os-surface border border-os-border": m.role === "assistant",
+                        }}
+                      >
+                        <Show when={m.content}>
+                          <span>{m.content}</span>
+                        </Show>
+                        {/* Slash-command Run / Cancel gate (legacy single-payload). */}
+                        <Show when={m.pendingConfirmation}>
+                          <div class="flex flex-col gap-1.5 pt-1.5 border-t border-os-border/60">
+                            <span class="text-[10px] text-amber-400">
+                              ⚠️ This action mutates your VFS.
+                            </span>
+                            <div class="flex gap-2">
+                              <button
+                                type="button"
+                                class="px-3 py-1 rounded text-[11px] bg-os-danger text-white hover:opacity-90 transition-opacity"
+                                onClick={() => {
+                                  const convId = currentConversationId();
+                                  if (convId) runPendingConfirmation(convId, m.id);
+                                }}
+                              >
+                                Run
+                              </button>
+                              <button
+                                type="button"
+                                class="px-3 py-1 rounded text-[11px] bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors"
+                                onClick={() => {
+                                  const convId = currentConversationId();
+                                  if (convId) cancelPendingConfirmation(convId, m.id);
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </Show>
+                        </Show>
+                        {/* LLM tool calls (Feature #3). Each call card shows
+                            the function + args; dangerous calls render their
+                            own Run / Cancel until resolved. */}
+                        <Show when={m.toolCalls && m.toolCalls.length > 0}>
+                          <div class="flex flex-col gap-1.5 pt-1.5 border-t border-os-border/60">
+                            <For each={m.toolCalls}>
+                              {(tc) => (
+                                <div class="flex flex-col gap-1 rounded bg-os-bg/40 border border-os-border/40 px-2 py-1.5">
+                                  <div class="flex items-center gap-1.5 text-[10px] font-mono">
+                                    <span class="text-os-accent">{tc.name}</span>
+                                    <span class="text-os-text-muted truncate">
+                                      ({JSON.stringify(tc.args)})
+                                    </span>
+                                  </div>
+                                  <Show when={tc.confirmation}>
+                                    <div class="flex flex-col gap-1">
+                                      <span class="text-[10px] text-amber-400">
+                                        ⚠️ Mutates VFS — confirm to run.
+                                      </span>
+                                      <div class="flex gap-2">
+                                        <button
+                                          type="button"
+                                          class="px-2 py-0.5 rounded text-[10px] bg-os-danger text-white hover:opacity-90 transition-opacity"
+                                          onClick={() => {
+                                            const convId = currentConversationId();
+                                            if (convId) runPendingToolCall(convId, m.id, tc.id);
+                                          }}
+                                        >
+                                          Run
+                                        </button>
+                                        <button
+                                          type="button"
+                                          class="px-2 py-0.5 rounded text-[10px] bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors"
+                                          onClick={() => {
+                                            const convId = currentConversationId();
+                                            if (convId) cancelPendingToolCall(convId, m.id, tc.id);
+                                          }}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </Show>
+                                  <Show when={tc.result !== undefined}>
+                                    <div
+                                      class="text-[10px] font-mono whitespace-pre-wrap break-words text-os-text-muted"
+                                      classList={{ "text-amber-400": tc.cancelled }}
+                                    >
+                                      {tc.result}
+                                    </div>
+                                  </Show>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
                     </div>
-                  </div>
+                  </Show>
                 )}
               </For>
               <Show when={pending()}>
@@ -553,6 +628,25 @@ const SettingsPanel: Component = () => {
         />
       </label>
 
+      <h2 class="text-sm font-semibold pt-2">Tool calling</h2>
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={cfg().toolCallingEnabled}
+          onChange={(e) => setConfig({ toolCallingEnabled: e.currentTarget.checked })}
+        />
+        <span class="text-[11px]">
+          <span class="block text-os-text">Let the LLM call CloudOS tools</span>
+          <span class="block text-os-text-muted mt-0.5">
+            When on, OpenAI / OpenAI-compatible / tool-capable Ollama models receive the
+            CloudOS tools schema and may invoke <code>read_file</code>, <code>list_dir</code>,
+            <code>write_file</code>, etc. directly. Mutating tools still go through the same
+            confirmation gate as slash commands. Anthropic support arrives in the next batch.
+          </span>
+        </span>
+      </label>
+
       <h2 class="text-sm font-semibold pt-2">Dangerous commands</h2>
       <label class="flex items-start gap-2 cursor-pointer">
         <input
@@ -567,6 +661,7 @@ const SettingsPanel: Component = () => {
             When off (default), <code>/write</code>, <code>/mkdir</code>, <code>/rm</code>, and
             <code>/mv</code> show a Run / Cancel button in chat and wait for confirmation. When
             on, they mutate the VFS immediately — convenient for power users, easy to misfire.
+            Also applies to dangerous LLM tool calls when tool calling is on above.
           </span>
         </span>
       </label>

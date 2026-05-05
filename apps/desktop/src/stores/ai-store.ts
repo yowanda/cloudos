@@ -3,10 +3,42 @@ import {
   type ConfirmationPayload,
   describeConfirmation,
   executeConfirmedAction,
+  getToolsSchema,
+  runTool,
   tryExecuteSlashCommand,
 } from "./ai-tools";
+import { supportsToolCalling } from "./ollama-tools";
 
-export type AIRole = "user" | "assistant" | "system";
+export type AIRole = "user" | "assistant" | "system" | "tool";
+
+/**
+ * One LLM-emitted tool call, captured on an assistant message. Each
+ * call moves through one of three terminal states:
+ *   - `result` set, `confirmation` undefined, `cancelled` falsy
+ *       — read-only or already-allowed mutating call, executed
+ *   - `confirmation` set, `result` undefined
+ *       — dangerous mutating call queued behind Run / Cancel
+ *   - `cancelled: true`, `result` set to a cancellation notice
+ *       — user clicked Cancel
+ *
+ * Once every call on a message reaches a terminal state with `result`
+ * populated (i.e. no pending confirmations), the multi-turn loop is
+ * resumed via `resumeAfterToolConfirmation`.
+ */
+export interface ToolCallInvocation {
+  /** Provider-issued id (used to match the `tool` result message back). */
+  id: string;
+  /** Tool name as registered in `ai-tools.tools`. */
+  name: string;
+  /** Parsed JSON params object. */
+  args: Record<string, unknown>;
+  /** Tool result text once the call is resolved. */
+  result?: string;
+  /** Set when the call is dangerous and waiting for Run / Cancel. */
+  confirmation?: ConfirmationPayload;
+  /** True if the user clicked Cancel rather than Run. */
+  cancelled?: boolean;
+}
 
 export interface AIMessage {
   id: string;
@@ -20,6 +52,16 @@ export interface AIMessage {
    * `runPendingConfirmation` or `cancelPendingConfirmation`.
    */
   pendingConfirmation?: ConfirmationPayload;
+  /**
+   * Set on assistant messages where the LLM emitted structured tool
+   * calls (function-calling). The UI renders the call list and
+   * per-call Run / Cancel for any dangerous call still pending.
+   */
+  toolCalls?: ToolCallInvocation[];
+  /** Set on `tool` role messages — the call id this result answers. */
+  toolCallId?: string;
+  /** Set on `tool` role messages — the tool name (for UI labelling). */
+  toolName?: string;
 }
 
 export interface AIConversation {
@@ -45,8 +87,18 @@ export interface AIConfig {
    * When true, the dangerous slash commands (`/write`, `/mkdir`, `/rm`,
    * `/mv`) skip the Run / Cancel confirmation gate and run their
    * mutation immediately. Default off — the gate is the safer choice.
+   * Also applies to dangerous LLM tool calls.
    */
   dangerousAlwaysAllow: boolean;
+  /**
+   * When true, OpenAI / Ollama / OpenAI-compatible providers are sent a
+   * `tools[]` parameter listing CloudOS's typed tools and the response
+   * is parsed for `tool_calls`. Multi-turn (LLM → tool → LLM) up to
+   * `toolCallMaxIterations` rounds. Default off because not every
+   * model honours `tools[]` correctly. Echo and Anthropic ignore this
+   * flag in 3b (Anthropic comes in 3c).
+   */
+  toolCallingEnabled: boolean;
 }
 
 const CONV_KEY = "cloudos:ai:conversations";
@@ -60,7 +112,11 @@ const defaultConfig: AIConfig = {
   systemPrompt:
     "You are CloudOS Assistant, an AI helper inside a browser-based desktop OS. Be concise and helpful.",
   dangerousAlwaysAllow: false,
+  toolCallingEnabled: false,
 };
+
+/** Hard cap on LLM → tool → LLM round-trips per user message. */
+const TOOL_CALL_MAX_ITERATIONS = 5;
 
 function loadConvs(): AIConversation[] {
   if (typeof window === "undefined") return [];
@@ -242,23 +298,75 @@ export function cancelPendingConfirmation(convId: string, msgId: string) {
   });
 }
 
-interface ProviderRequest {
-  messages: { role: AIRole; content: string }[];
-  config: AIConfig;
-  signal: AbortSignal;
+/**
+ * Provider-agnostic chat message wire format. The OpenAI / Ollama
+ * `/chat/completions` and `/api/chat` endpoints accept this verbatim;
+ * Anthropic needs a small adapter (system pulled out, role names mapped),
+ * which is handled in `callAnthropic`.
+ */
+interface WireMessage {
+  role: AIRole;
+  content: string;
+  /** OpenAI-style: present on assistant messages with tool calls. */
+  tool_calls?: {
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }[];
+  /** OpenAI-style: present on `tool` role messages. */
+  tool_call_id?: string;
+  /** OpenAI-style: present on `tool` role messages (some providers). */
+  name?: string;
 }
 
-async function callOpenAICompatible(req: ProviderRequest): Promise<string> {
+interface ProviderRequest {
+  messages: WireMessage[];
+  config: AIConfig;
+  signal: AbortSignal;
+  /** When true, send `tools[]` (OpenAI/Ollama) and parse `tool_calls`. */
+  withTools: boolean;
+}
+
+/**
+ * Either a plain assistant text reply or a request from the LLM to
+ * invoke one or more tools. `text` is empty (or accompanied by
+ * `toolCalls`) when the model wants to call functions.
+ */
+interface ProviderResponse {
+  text: string;
+  toolCalls?: ToolCallInvocation[];
+}
+
+/**
+ * Parse `arguments` from an OpenAI-style tool call (always a JSON
+ * string per the spec) into a typed object. Bad JSON → empty object
+ * (the tool's run() will surface a friendlier validation error).
+ */
+function parseToolArgs(raw: string | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function callOpenAICompatible(req: ProviderRequest): Promise<ProviderResponse> {
   const url = `${req.config.baseUrl.replace(/\/$/, "")}/chat/completions`;
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
   if (req.config.apiKey) headers.authorization = `Bearer ${req.config.apiKey}`;
-  const body = {
+  const body: Record<string, unknown> = {
     model: req.config.model,
     messages: req.messages,
     stream: false,
   };
+  if (req.withTools) {
+    body.tools = getToolsSchema();
+    body.tool_choice = "auto";
+  }
   const res = await fetch(url, {
     method: "POST",
     headers,
@@ -270,35 +378,96 @@ async function callOpenAICompatible(req: ProviderRequest): Promise<string> {
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: {
+      message?: {
+        content?: string | null;
+        tool_calls?: {
+          id?: string;
+          type?: string;
+          function?: { name?: string; arguments?: string };
+        }[];
+      };
+    }[];
   };
-  return data.choices?.[0]?.message?.content?.trim() ?? "(empty response)";
+  const message = data.choices?.[0]?.message;
+  const text = message?.content?.trim() ?? "";
+  const rawCalls = message?.tool_calls ?? [];
+  if (rawCalls.length === 0) {
+    return { text: text || "(empty response)" };
+  }
+  const toolCalls: ToolCallInvocation[] = rawCalls
+    .filter((c) => c.function?.name)
+    .map((c, i) => ({
+      id: c.id ?? `call-${i}`,
+      name: c.function?.name ?? "",
+      args: parseToolArgs(c.function?.arguments),
+    }));
+  return { text, toolCalls };
 }
 
-async function callOllama(req: ProviderRequest): Promise<string> {
+async function callOllama(req: ProviderRequest): Promise<ProviderResponse> {
   const url = `${req.config.baseUrl.replace(/\/$/, "")}/api/chat`;
+  const body: Record<string, unknown> = {
+    model: req.config.model,
+    messages: req.messages,
+    stream: false,
+  };
+  // Ollama copies OpenAI's tools[] shape verbatim on /api/chat. Only
+  // send tools when the user opted in AND the installed model is on
+  // the known-tool-capable allow-list (`ollama-tools.ts`).
+  if (req.withTools && supportsToolCalling(req.config.model)) {
+    body.tools = getToolsSchema();
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      model: req.config.model,
-      messages: req.messages,
-      stream: false,
-    }),
+    body: JSON.stringify(body),
     signal: req.signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
-  const data = (await res.json()) as { message?: { content?: string } };
-  return data.message?.content?.trim() ?? "(empty response)";
+  const data = (await res.json()) as {
+    message?: {
+      content?: string;
+      tool_calls?: {
+        function?: { name?: string; arguments?: Record<string, unknown> | string };
+      }[];
+    };
+  };
+  const text = data.message?.content?.trim() ?? "";
+  const rawCalls = data.message?.tool_calls ?? [];
+  if (rawCalls.length === 0) {
+    return { text: text || "(empty response)" };
+  }
+  // Ollama returns `arguments` as an already-parsed object on most
+  // models, but a string on a few — normalise both.
+  const toolCalls: ToolCallInvocation[] = rawCalls
+    .filter((c) => c.function?.name)
+    .map((c, i) => {
+      const rawArgs = c.function?.arguments;
+      const args =
+        typeof rawArgs === "string"
+          ? parseToolArgs(rawArgs)
+          : rawArgs && typeof rawArgs === "object"
+            ? (rawArgs as Record<string, unknown>)
+            : {};
+      return {
+        id: `ollama-call-${Date.now()}-${i}`,
+        name: c.function?.name ?? "",
+        args,
+      };
+    });
+  return { text, toolCalls };
 }
 
-async function callAnthropic(req: ProviderRequest): Promise<string> {
+async function callAnthropic(req: ProviderRequest): Promise<ProviderResponse> {
+  // Anthropic tool-use lands in batch 3c. For 3b, ignore tools and
+  // just translate the wire messages into Anthropic's flatter shape.
   const url = `${req.config.baseUrl.replace(/\/$/, "")}/v1/messages`;
   const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
-  const others = req.messages.filter((m) => m.role !== "system");
+  const others = req.messages.filter((m) => m.role !== "system" && m.role !== "tool");
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -310,7 +479,10 @@ async function callAnthropic(req: ProviderRequest): Promise<string> {
       model: req.config.model,
       system: sys,
       max_tokens: 1024,
-      messages: others.map((m) => ({ role: m.role, content: m.content })),
+      messages: others.map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      })),
     }),
     signal: req.signal,
   });
@@ -319,7 +491,9 @@ async function callAnthropic(req: ProviderRequest): Promise<string> {
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
   const data = (await res.json()) as { content?: { text?: string }[] };
-  return data.content?.map((c) => c.text ?? "").join("").trim() ?? "(empty response)";
+  const text =
+    data.content?.map((c) => c.text ?? "").join("").trim() ?? "(empty response)";
+  return { text };
 }
 
 function echoProvider(req: ProviderRequest): string {
@@ -341,6 +515,98 @@ function echoProvider(req: ProviderRequest): string {
     return `It is ${new Date().toLocaleString()} on your device.`;
   }
   return `Echo: ${content}`;
+}
+
+/**
+ * Build the wire-format messages array from a conversation. We strip
+ * `pendingConfirmation` / `toolCalls` / etc. metadata fields and emit
+ * just the role + content (+ tool_call wiring for assistant / tool
+ * messages). System prompt is always first when present.
+ */
+function buildWireMessages(
+  systemPrompt: string,
+  messages: AIMessage[],
+): WireMessage[] {
+  const wire: WireMessage[] = [];
+  if (systemPrompt) wire.push({ role: "system", content: systemPrompt });
+  for (const m of messages) {
+    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+      wire.push({
+        role: "assistant",
+        content: m.content || "",
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+        })),
+      });
+      continue;
+    }
+    if (m.role === "tool") {
+      wire.push({
+        role: "tool",
+        content: m.content,
+        tool_call_id: m.toolCallId,
+        name: m.toolName,
+      });
+      continue;
+    }
+    wire.push({ role: m.role, content: m.content });
+  }
+  return wire;
+}
+
+/**
+ * Whether the configured provider supports OpenAI-style tool-calling.
+ * Anthropic returns `false` here for 3b; lands in 3c.
+ */
+function providerSupportsTools(cfg: AIConfig): boolean {
+  if (!cfg.toolCallingEnabled) return false;
+  switch (cfg.provider) {
+    case "openai":
+    case "openai-compatible":
+      return true;
+    case "ollama":
+      // Conservative: only when the configured model is on the
+      // known-tool-capable allow-list. The provider helper double-checks.
+      return supportsToolCalling(cfg.model);
+    default:
+      return false;
+  }
+}
+
+async function dispatchProvider(req: ProviderRequest): Promise<ProviderResponse> {
+  switch (req.config.provider) {
+    case "openai":
+    case "openai-compatible":
+      return callOpenAICompatible(req);
+    case "ollama":
+      return callOllama(req);
+    case "anthropic":
+      return callAnthropic(req);
+    case "echo":
+    default:
+      return { text: echoProvider(req) };
+  }
+}
+
+/**
+ * Execute one tool call against the live VFS / desktop state, gating
+ * dangerous calls behind the configured `dangerousAlwaysAllow` flag.
+ * Mutates `tc` in place: writes either `result` or `confirmation`.
+ */
+async function resolveToolCall(tc: ToolCallInvocation, cfg: AIConfig): Promise<void> {
+  const out = await runTool(tc.name, tc.args, { alwaysAllow: cfg.dangerousAlwaysAllow });
+  if (out.confirmation) {
+    tc.confirmation = out.confirmation;
+  } else {
+    tc.result = out.content;
+  }
+}
+
+/** True iff every tool call on a message has reached a terminal state. */
+function allCallsResolved(calls: ToolCallInvocation[]): boolean {
+  return calls.every((c) => c.result !== undefined || c.cancelled === true);
 }
 
 export interface SendOptions {
@@ -390,40 +656,10 @@ export async function sendMessage(text: string, opts: SendOptions = {}): Promise
   }
 
   const sys = opts.systemPrompt ?? cfg.systemPrompt;
-  const history: { role: AIRole; content: string }[] = [];
-  if (sys) history.push({ role: "system", content: sys });
-  // Re-read messages after user append
-  const updated = conversations().find((c) => c.id === conv!.id);
-  for (const m of updated?.messages ?? []) {
-    history.push({ role: m.role, content: m.content });
-  }
-
   const controller = new AbortController();
   setPending(true);
   try {
-    let reply: string;
-    const req: ProviderRequest = { messages: history, config: cfg, signal: controller.signal };
-    switch (cfg.provider) {
-      case "openai":
-      case "openai-compatible":
-        reply = await callOpenAICompatible(req);
-        break;
-      case "ollama":
-        reply = await callOllama(req);
-        break;
-      case "anthropic":
-        reply = await callAnthropic(req);
-        break;
-      case "echo":
-      default:
-        reply = echoProvider(req);
-    }
-    appendMessage(conv.id, {
-      id: `msg-${Date.now()}-${nextMsg++}`,
-      role: "assistant",
-      content: reply,
-      timestamp: Date.now(),
-    });
+    await runProviderLoop(conv.id, sys, cfg, controller.signal);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     appendMessage(conv.id, {
@@ -434,5 +670,208 @@ export async function sendMessage(text: string, opts: SendOptions = {}): Promise
     });
   } finally {
     setPending(false);
+  }
+}
+
+/**
+ * Drive the LLM \u2194 tool round-trip loop. Returns when the LLM produces
+ * a plain text reply, when a dangerous tool call is queued behind
+ * Run / Cancel (loop will be resumed by `resumeAfterToolConfirmation`),
+ * or when `TOOL_CALL_MAX_ITERATIONS` is hit.
+ */
+async function runProviderLoop(
+  convId: string,
+  systemPrompt: string,
+  cfg: AIConfig,
+  signal: AbortSignal,
+): Promise<void> {
+  const withTools = providerSupportsTools(cfg);
+  for (let iteration = 0; iteration < TOOL_CALL_MAX_ITERATIONS; iteration++) {
+    // Re-read the conversation each iteration so the latest tool
+    // result messages are picked up.
+    const conv = conversations().find((c) => c.id === convId);
+    if (!conv) return;
+    const wire = buildWireMessages(systemPrompt, conv.messages);
+    const req: ProviderRequest = { messages: wire, config: cfg, signal, withTools };
+    const resp = await dispatchProvider(req);
+
+    // Plain text reply — append and we're done.
+    if (!resp.toolCalls || resp.toolCalls.length === 0) {
+      appendMessage(convId, {
+        id: `msg-${Date.now()}-${nextMsg++}`,
+        role: "assistant",
+        content: resp.text || "(empty response)",
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    // Resolve every tool call against the live state. Read-only and
+    // already-allowed mutating calls execute immediately; dangerous
+    // calls without `dangerousAlwaysAllow` come back with a
+    // `confirmation` payload and stop the loop.
+    for (const tc of resp.toolCalls) {
+      await resolveToolCall(tc, cfg);
+    }
+
+    const previewLines = resp.toolCalls.map((tc) => `\u2192 ${tc.name}(${JSON.stringify(tc.args)})`);
+    const previewBody =
+      (resp.text ? `${resp.text}\n\n` : "") + previewLines.join("\n");
+    const assistantMsgId = `msg-${Date.now()}-${nextMsg++}`;
+    appendMessage(convId, {
+      id: assistantMsgId,
+      role: "assistant",
+      content: previewBody,
+      timestamp: Date.now(),
+      toolCalls: resp.toolCalls,
+    });
+
+    if (!allCallsResolved(resp.toolCalls)) {
+      // At least one dangerous call is queued behind Run / Cancel.
+      // Stop here \u2014 the user will resume via the chat UI.
+      return;
+    }
+
+    // All resolved \u2014 append tool result messages and loop again so
+    // the LLM can react to them.
+    for (const tc of resp.toolCalls) {
+      appendMessage(convId, {
+        id: `msg-${Date.now()}-${nextMsg++}`,
+        role: "tool",
+        content: tc.result ?? "",
+        timestamp: Date.now(),
+        toolCallId: tc.id,
+        toolName: tc.name,
+      });
+    }
+  }
+
+  // Hit the iteration cap \u2014 surface a warning so the user knows the
+  // model would have kept calling tools indefinitely.
+  appendMessage(convId, {
+    id: `msg-${Date.now()}-${nextMsg++}`,
+    role: "assistant",
+    content: `\u26a0\ufe0f Tool-call iteration cap reached (${TOOL_CALL_MAX_ITERATIONS}). Stopping to avoid a runaway loop.`,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * After the user resolves the last pending Run / Cancel on a message
+ * carrying `toolCalls`, append tool result messages and re-enter the
+ * provider loop so the LLM can react to the outcomes.
+ */
+async function resumeAfterToolCalls(convId: string, msgId: string): Promise<void> {
+  const conv = conversations().find((c) => c.id === convId);
+  const msg = conv?.messages.find((m) => m.id === msgId);
+  if (!msg?.toolCalls || !allCallsResolved(msg.toolCalls)) return;
+
+  // Append tool result messages corresponding to this assistant turn.
+  for (const tc of msg.toolCalls) {
+    appendMessage(convId, {
+      id: `msg-${Date.now()}-${nextMsg++}`,
+      role: "tool",
+      content: tc.result ?? "",
+      timestamp: Date.now(),
+      toolCallId: tc.id,
+      toolName: tc.name,
+    });
+  }
+
+  const cfg = config();
+  const sys = cfg.systemPrompt;
+  const controller = new AbortController();
+  setPending(true);
+  try {
+    await runProviderLoop(convId, sys, cfg, controller.signal);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    appendMessage(convId, {
+      id: `msg-${Date.now()}-${nextMsg++}`,
+      role: "assistant",
+      content: `⚠️ Provider error: ${message}`,
+      timestamp: Date.now(),
+    });
+  } finally {
+    setPending(false);
+  }
+}
+
+/**
+ * Resolve a single tool call inside an assistant message. If this was
+ * the last pending call, kicks off `resumeAfterToolCalls` so the LLM
+ * can see the outcome and continue the conversation.
+ */
+function patchToolCall(
+  convId: string,
+  msgId: string,
+  callId: string,
+  patch: Partial<ToolCallInvocation>,
+): boolean {
+  let resolvedAll = false;
+  setConversations(
+    conversations().map((c) => {
+      if (c.id !== convId) return c;
+      return {
+        ...c,
+        messages: c.messages.map((m) => {
+          if (m.id !== msgId || !m.toolCalls) return m;
+          const nextCalls = m.toolCalls.map((tc) =>
+            tc.id === callId ? { ...tc, ...patch } : tc,
+          );
+          if (allCallsResolved(nextCalls)) resolvedAll = true;
+          return { ...m, toolCalls: nextCalls };
+        }),
+        updatedAt: Date.now(),
+      };
+    }),
+  );
+  persistConvs();
+  return resolvedAll;
+}
+
+/**
+ * User clicked Run on a dangerous LLM tool call. Apply the mutation
+ * and (if this was the last pending call on the message) resume the
+ * multi-turn loop.
+ */
+export function runPendingToolCall(convId: string, msgId: string, callId: string) {
+  const conv = conversations().find((c) => c.id === convId);
+  const msg = conv?.messages.find((m) => m.id === msgId);
+  const tc = msg?.toolCalls?.find((c) => c.id === callId);
+  if (!tc?.confirmation) return;
+  let outcome: string;
+  try {
+    outcome = executeConfirmedAction(tc.confirmation);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    outcome = `Failed to apply confirmed action: ${m}`;
+  }
+  const resolvedAll = patchToolCall(convId, msgId, callId, {
+    result: outcome,
+    confirmation: undefined,
+  });
+  if (resolvedAll) {
+    void resumeAfterToolCalls(convId, msgId);
+  }
+}
+
+/**
+ * User clicked Cancel on a dangerous LLM tool call. Record the
+ * cancellation as the result and (if last pending) resume the loop so
+ * the LLM can react.
+ */
+export function cancelPendingToolCall(convId: string, msgId: string, callId: string) {
+  const conv = conversations().find((c) => c.id === convId);
+  const msg = conv?.messages.find((m) => m.id === msgId);
+  const tc = msg?.toolCalls?.find((c) => c.id === callId);
+  if (!tc?.confirmation) return;
+  const resolvedAll = patchToolCall(convId, msgId, callId, {
+    result: "Cancelled by user — no changes made.",
+    confirmation: undefined,
+    cancelled: true,
+  });
+  if (resolvedAll) {
+    void resumeAfterToolCalls(convId, msgId);
   }
 }
