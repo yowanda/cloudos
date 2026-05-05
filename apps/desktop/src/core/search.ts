@@ -1,5 +1,6 @@
 import { exportSnapshot } from "../vfs/vfs";
 import { listManifests } from "./app-manifest";
+import { listCommands, commandScore } from "./commands";
 
 export type SearchKind = "file" | "app" | "command";
 
@@ -64,7 +65,33 @@ export function searchLocal(
   options: { onOpenApp?: (appId: string, name: string, icon: string) => void; onOpenFile?: (path: string, name: string) => void } = {},
 ): SearchResult[] {
   if (!query.trim()) return [];
+
+  // Command palette mode: leading ">" or ":" filters to commands only.
+  const trimmed = query.trim();
+  const commandOnly = trimmed.startsWith(">") || trimmed.startsWith(":");
+  const effectiveQuery = commandOnly ? trimmed.slice(1).trim() : trimmed;
+
   const results: SearchResult[] = [];
+
+  // Commands (always run; in command-only mode this is the entire result set)
+  for (const cmd of listCommands()) {
+    const score = commandScore(effectiveQuery, cmd);
+    if (score > 0) {
+      results.push({
+        kind: "command",
+        id: cmd.id,
+        title: cmd.title,
+        subtitle: cmd.subtitle,
+        icon: cmd.icon,
+        // Commands sort above files but below very-strong app matches.
+        score: commandOnly ? score + 200 : score + 60,
+        action: cmd.run,
+      });
+    }
+  }
+  if (commandOnly) {
+    return results.sort((a, b) => b.score - a.score).slice(0, 30);
+  }
 
   // Apps
   const seen = new Set<string>();

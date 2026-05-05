@@ -338,10 +338,12 @@ export function permanentDelete(trashPath: string) {
   notifyTrash();
 }
 
-export function emptyTrash() {
+export function emptyTrash(): number {
+  const removed = trash.size;
   trash.clear();
   persistTrash();
   notifyTrash();
+  return removed;
 }
 
 export interface VFSStats {

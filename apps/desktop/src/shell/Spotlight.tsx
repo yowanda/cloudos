@@ -107,7 +107,7 @@ export const Spotlight: Component = () => {
                 setActiveIdx(0);
               }}
               onKeyDown={onKey}
-              placeholder="Search apps and files..."
+              placeholder="Search apps, files, commands…  (prefix with > for commands only)"
               class="flex-1 bg-transparent border-0 outline-none text-os-text placeholder:text-os-text-muted text-sm"
             />
             <span class="text-[10px] text-os-text-muted">↑↓ select · ↵ open · Esc close</span>

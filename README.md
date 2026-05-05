@@ -101,9 +101,10 @@ Supported sources:
 - **Reverse proxy**: ready-to-deploy Caddyfiles in [`deploy/`](./deploy/) — production (auto-TLS via Let's Encrypt) and local-HTTPS variants.
 - **Backup**: [`deploy/backup.sh`](./deploy/backup.sh) snapshots Postgres + MinIO bucket + VFS data into a single zstd-compressed archive with configurable retention.
 
-### Search (Spotlight)
+### Search (Spotlight) & Command Palette
 - **Ctrl+K** (or **Ctrl+Space**, or the magnifier in the taskbar) opens a Spotlight-style overlay.
-- Searches **apps + manifests + files (name & content)** with arrow-key navigation, ranked by exact/prefix/token/contains scoring.
+- Searches **apps + manifests + files (name & content) + system commands** with arrow-key navigation, ranked by exact/prefix/token/contains scoring.
+- **Command palette mode**: prefix the query with `>` (or `:`) to search only system commands. Built-in commands include: close/maximize/minimize focused window; snap left/right; reload; lock screen; toggle system sounds; empty trash; switch theme (one entry per built-in **and** imported theme); switch workspace; jump to any Settings page (Appearance / Sound / Apps / Storage / …). Commands carry keyword aliases so `>kill`, `>reboot`, `>mute`, `>tile` all work.
 - Optional **Meilisearch** backend (`apps/desktop/src/core/search.ts`'s `searchMeili`) — point it at `https://meili.example/indexes/<name>/search` for remote-indexed search of larger corpora.
 
 ### File sharing

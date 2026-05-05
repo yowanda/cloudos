@@ -29,6 +29,10 @@ import {
 import { listShortcuts, resetShortcut } from "../core/shortcut-manager";
 import { openWindow } from "../stores/window-store";
 import {
+  pendingSettingsPage,
+  consumePendingSettingsPage,
+} from "../core/settings-nav";
+import {
   soundEnabled,
   soundVolume,
   setSoundEnabled,
@@ -214,8 +218,22 @@ const Settings: Component<{ windowId: string }> = () => {
 
   onMount(() => {
     refreshStats();
+    // If Spotlight (or anything else) staged a page jump before the
+    // Settings window opened, pick it up now.
+    const initialJump = consumePendingSettingsPage();
+    if (initialJump) setPage(initialJump);
     const unsub = subscribeTrash(refreshStats);
     onCleanup(unsub);
+  });
+
+  // Existing Settings windows also listen for jumps so that "Jump to
+  // Settings → Sound" focuses + navigates an already-open window.
+  createMemo(() => {
+    const jump = pendingSettingsPage();
+    if (jump) {
+      setPage(jump);
+      consumePendingSettingsPage();
+    }
   });
 
   const sidebarItems: { id: SettingsPage; label: string; icon: string }[] = [

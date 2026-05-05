@@ -144,6 +144,7 @@
   - [x] Optional Meilisearch integration (`searchMeili`, config in localStorage)
   - [x] Full-text file search via Spotlight overlay
   - [x] Search UI in taskbar (button + Ctrl+K / Ctrl+Space shortcut)
+  - [x] **Command palette** — `>`/`:` prefix in Spotlight switches to commands-only mode. `core/commands.ts` exposes a system-wide registry (close/maximize/minimize focused window, snap left/right, reload, lock, toggle sound, empty trash, switch theme per id, jump-to Settings page, switch workspace). Settings deep-links use a `pendingSettingsPage` cross-window signal so the same Settings window can be re-targeted instead of opening a new one.
 - [x] CI/CD & Deployment
   - [x] GitHub Actions: build frontend + backend on every PR
   - [x] Release workflow: tag-triggered, publishes Docker images to GHCR
