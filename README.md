@@ -33,7 +33,7 @@
 | Settings | Theme toggle, accent color picker, system info |
 | Notes | Notepad app |
 | Image Viewer | Image viewer placeholder |
-| App Store | Browse by category, search, install/uninstall apps |
+| App Store | Browse by category, search, install/uninstall, **ratings & reviews** (1–5 stars, write/edit/delete your own, histogram, persisted) |
 | Media Player | Audio + video playback, library with search/filter, drag/drop file import, shuffle, repeat (off/all/one), real seek/volume/mute |
 | Shortcuts | Browse, remap, and reset all keyboard shortcuts |
 

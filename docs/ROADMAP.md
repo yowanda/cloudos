@@ -163,7 +163,7 @@
 - [x] App Store
   - [x] Browse apps by category
   - [x] Install / uninstall
-  - [ ] Ratings & reviews
+  - [x] Ratings & reviews (1–5 stars, write/edit/delete your own, average + histogram, persisted in localStorage)
   - [ ] Developer portal (submit apps)
 - [ ] AI Assistant
   - [ ] Chat UI (sidebar or window)
