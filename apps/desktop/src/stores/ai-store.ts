@@ -91,12 +91,11 @@ export interface AIConfig {
    */
   dangerousAlwaysAllow: boolean;
   /**
-   * When true, OpenAI / Ollama / OpenAI-compatible providers are sent a
-   * `tools[]` parameter listing CloudOS's typed tools and the response
-   * is parsed for `tool_calls`. Multi-turn (LLM → tool → LLM) up to
-   * `toolCallMaxIterations` rounds. Default off because not every
-   * model honours `tools[]` correctly. Echo and Anthropic ignore this
-   * flag in 3b (Anthropic comes in 3c).
+   * When true, OpenAI / OpenAI-compatible / Anthropic / tool-capable
+   * Ollama providers are sent the CloudOS tools schema and the response
+   * is parsed for tool calls. Multi-turn (LLM → tool → LLM) up to
+   * `TOOL_CALL_MAX_ITERATIONS` rounds. Default off because not every
+   * model honours tools correctly. Echo always ignores this flag.
    */
   toolCallingEnabled: boolean;
 }
@@ -462,12 +461,95 @@ async function callOllama(req: ProviderRequest): Promise<ProviderResponse> {
   return { text, toolCalls };
 }
 
+/**
+ * Anthropic content block — text or tool_use on assistant turns,
+ * tool_result on user turns. We hand-roll this rather than pulling
+ * in `@anthropic-ai/sdk` because the wire shape is small and stable
+ * and we don't want the bundle bloat in this PWA.
+ */
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string };
+
+interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string | AnthropicContentBlock[];
+}
+
+/**
+ * Translate the OpenAI-shaped wire messages into Anthropic's content-block
+ * format. Tool results land as `user` messages with a `tool_result` block;
+ * assistant turns with tool calls land as content arrays mixing `text`
+ * and `tool_use` blocks.
+ */
+function wireToAnthropic(messages: WireMessage[]): AnthropicMessage[] {
+  const out: AnthropicMessage[] = [];
+  for (const m of messages) {
+    if (m.role === "system") continue; // pulled out into the top-level `system` field
+    if (m.role === "tool") {
+      out.push({
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: m.tool_call_id ?? "",
+            content: m.content,
+          },
+        ],
+      });
+      continue;
+    }
+    if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+      const blocks: AnthropicContentBlock[] = [];
+      if (m.content) blocks.push({ type: "text", text: m.content });
+      for (const tc of m.tool_calls) {
+        let input: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(tc.function.arguments || "{}");
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            input = parsed as Record<string, unknown>;
+          }
+        } catch {
+          input = {};
+        }
+        blocks.push({
+          type: "tool_use",
+          id: tc.id,
+          name: tc.function.name,
+          input,
+        });
+      }
+      out.push({ role: "assistant", content: blocks });
+      continue;
+    }
+    out.push({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+    });
+  }
+  return out;
+}
+
 async function callAnthropic(req: ProviderRequest): Promise<ProviderResponse> {
-  // Anthropic tool-use lands in batch 3c. For 3b, ignore tools and
-  // just translate the wire messages into Anthropic's flatter shape.
   const url = `${req.config.baseUrl.replace(/\/$/, "")}/v1/messages`;
   const sys = req.messages.find((m) => m.role === "system")?.content ?? "";
-  const others = req.messages.filter((m) => m.role !== "system" && m.role !== "tool");
+  const messages = wireToAnthropic(req.messages);
+  const body: Record<string, unknown> = {
+    model: req.config.model,
+    system: sys,
+    max_tokens: 1024,
+    messages,
+  };
+  if (req.withTools) {
+    // Anthropic's tools[] uses { name, description, input_schema } —
+    // the inner schema is the same JSON schema we ship to OpenAI.
+    body.tools = getToolsSchema().map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters,
+    }));
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -475,25 +557,41 @@ async function callAnthropic(req: ProviderRequest): Promise<ProviderResponse> {
       "x-api-key": req.config.apiKey,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify({
-      model: req.config.model,
-      system: sys,
-      max_tokens: 1024,
-      messages: others.map((m) => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content,
-      })),
-    }),
+    body: JSON.stringify(body),
     signal: req.signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
-  const data = (await res.json()) as { content?: { text?: string }[] };
-  const text =
-    data.content?.map((c) => c.text ?? "").join("").trim() ?? "(empty response)";
-  return { text };
+  const data = (await res.json()) as {
+    content?: (
+      | { type: "text"; text?: string }
+      | { type: "tool_use"; id?: string; name?: string; input?: Record<string, unknown> }
+    )[];
+    stop_reason?: string;
+  };
+  const blocks = data.content ?? [];
+  const text = blocks
+    .filter((b): b is { type: "text"; text?: string } => b.type === "text")
+    .map((b) => b.text ?? "")
+    .join("")
+    .trim();
+  const toolUses = blocks.filter(
+    (b): b is { type: "tool_use"; id?: string; name?: string; input?: Record<string, unknown> } =>
+      b.type === "tool_use",
+  );
+  if (toolUses.length === 0) {
+    return { text: text || "(empty response)" };
+  }
+  const toolCalls: ToolCallInvocation[] = toolUses
+    .filter((b) => b.name)
+    .map((b, i) => ({
+      id: b.id ?? `anth-call-${Date.now()}-${i}`,
+      name: b.name ?? "",
+      args: b.input && typeof b.input === "object" ? b.input : {},
+    }));
+  return { text, toolCalls };
 }
 
 function echoProvider(req: ProviderRequest): string {
@@ -557,18 +655,19 @@ function buildWireMessages(
 }
 
 /**
- * Whether the configured provider supports OpenAI-style tool-calling.
- * Anthropic returns `false` here for 3b; lands in 3c.
+ * Whether the configured provider supports tool-calling. OpenAI /
+ * OpenAI-compatible / Anthropic always support it; Ollama only when
+ * the configured model is on the known-tool-capable allow-list. Echo
+ * never supports it (no LLM).
  */
 function providerSupportsTools(cfg: AIConfig): boolean {
   if (!cfg.toolCallingEnabled) return false;
   switch (cfg.provider) {
     case "openai":
     case "openai-compatible":
+    case "anthropic":
       return true;
     case "ollama":
-      // Conservative: only when the configured model is on the
-      // known-tool-capable allow-list. The provider helper double-checks.
       return supportsToolCalling(cfg.model);
     default:
       return false;

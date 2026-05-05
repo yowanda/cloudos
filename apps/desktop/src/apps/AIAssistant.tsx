@@ -639,10 +639,10 @@ const SettingsPanel: Component = () => {
         <span class="text-[11px]">
           <span class="block text-os-text">Let the LLM call CloudOS tools</span>
           <span class="block text-os-text-muted mt-0.5">
-            When on, OpenAI / OpenAI-compatible / tool-capable Ollama models receive the
-            CloudOS tools schema and may invoke <code>read_file</code>, <code>list_dir</code>,
-            <code>write_file</code>, etc. directly. Mutating tools still go through the same
-            confirmation gate as slash commands. Anthropic support arrives in the next batch.
+            When on, OpenAI / OpenAI-compatible / Anthropic / tool-capable Ollama models
+            receive the CloudOS tools schema and may invoke <code>read_file</code>,
+            <code>list_dir</code>, <code>write_file</code>, etc. directly. Mutating tools
+            still go through the same Run / Cancel gate as slash commands.
           </span>
         </span>
       </label>
