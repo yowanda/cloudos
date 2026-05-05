@@ -1,0 +1,21 @@
+export const darkTheme = {
+  name: "dark",
+  colors: {
+    "--color-os-bg": "#1a1a2e",
+    "--color-os-surface": "rgba(255, 255, 255, 0.08)",
+    "--color-os-surface-hover": "rgba(255, 255, 255, 0.12)",
+    "--color-os-border": "rgba(255, 255, 255, 0.1)",
+    "--color-os-text": "#e4e4e7",
+    "--color-os-text-muted": "#a1a1aa",
+    "--color-os-accent": "#6366f1",
+    "--color-os-accent-hover": "#818cf8",
+    "--color-os-danger": "#ef4444",
+    "--color-os-warning": "#f59e0b",
+    "--color-os-success": "#22c55e",
+    "--color-os-taskbar": "rgba(15, 15, 25, 0.85)",
+    "--color-os-dock": "rgba(15, 15, 25, 0.75)",
+    "--color-os-window": "rgba(30, 30, 50, 0.92)",
+    "--color-os-window-title": "rgba(20, 20, 35, 0.95)",
+  },
+  wallpaper: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+};
