@@ -15,7 +15,7 @@ type User struct {
 	AvatarURL    string         `gorm:"type:text" json:"avatar_url,omitempty"`
 	StorageQuota int64          `gorm:"default:5368709120" json:"storage_quota"`
 	StorageUsed  int64          `gorm:"default:0" json:"storage_used"`
-	Settings     map[string]any `gorm:"type:jsonb;default:'{}'" json:"settings"`
+	Settings     map[string]any `gorm:"type:jsonb;default:'{}';serializer:json" json:"settings"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
@@ -55,7 +55,7 @@ type App struct {
 	Description string         `gorm:"type:text" json:"description"`
 	IconURL     string         `gorm:"type:text" json:"icon_url"`
 	EntryURL    string         `gorm:"type:text;not null" json:"entry_url"`
-	Manifest    map[string]any `gorm:"type:jsonb;not null" json:"manifest"`
+	Manifest    map[string]any `gorm:"type:jsonb;not null;serializer:json" json:"manifest"`
 	Version     string         `gorm:"size:20" json:"version"`
 	Downloads   int            `gorm:"default:0" json:"downloads"`
 	Category    string         `gorm:"size:50" json:"category"`
