@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal } from "solid-js";
+import { Component, For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import {
   config,
   conversations,
@@ -12,6 +12,13 @@ import {
   setConfig,
 } from "../stores/ai-store";
 import { PROVIDER_PRESETS, findPresetById, type ProviderPreset } from "../stores/ai-provider-presets";
+import {
+  fetchOllamaTags,
+  pickFirstToolCapable,
+  supportsToolCalling,
+  type OllamaTagModel,
+  type OllamaTagsResult,
+} from "../stores/ollama-tools";
 
 /**
  * Pick the preset whose `baseUrl` + `providerType` matches the live
@@ -266,6 +273,7 @@ const SettingsPanel: Component = () => {
   const activePreset = createMemo<ProviderPreset>(
     () => findPresetById(activePresetId()) ?? PROVIDER_PRESETS[0],
   );
+  const isOllama = createMemo(() => activePresetId() === "ollama");
 
   const applyPreset = (preset: ProviderPreset) => {
     setConfig({
@@ -274,6 +282,50 @@ const SettingsPanel: Component = () => {
       model: preset.defaultModel,
     });
   };
+
+  const [ollamaProbe, setOllamaProbe] = createSignal<OllamaTagsResult | null>(null);
+  const [probing, setProbing] = createSignal(false);
+  const refreshOllamaTags = async () => {
+    if (!isOllama()) return;
+    setProbing(true);
+    try {
+      const res = await fetchOllamaTags(cfg().baseUrl);
+      setOllamaProbe(res);
+      if (res.ok) {
+        const installed = new Set(res.models.map((m) => m.name));
+        if (!installed.has(cfg().model)) {
+          const fallback = pickFirstToolCapable(res.models) ?? res.models[0];
+          if (fallback) setConfig({ model: fallback.name });
+        }
+      }
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  onMount(() => {
+    if (isOllama()) void refreshOllamaTags();
+  });
+  createEffect(
+    on(
+      () => [isOllama(), cfg().baseUrl] as const,
+      ([on, _url], prev) => {
+        if (!on) {
+          setOllamaProbe(null);
+          return;
+        }
+        if (!prev || !prev[0] || prev[1] !== _url) {
+          void refreshOllamaTags();
+        }
+      },
+    ),
+  );
+
+  const ollamaModels = createMemo<OllamaTagModel[]>(() => {
+    const r = ollamaProbe();
+    return r?.ok ? r.models : [];
+  });
+  const selectedSupportsTools = createMemo(() => supportsToolCalling(cfg().model));
 
   return (
     <div class="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
@@ -348,9 +400,22 @@ const SettingsPanel: Component = () => {
           </Show>
 
           <label class="block">
-            <span class="block text-os-text-muted mb-1">Model</span>
+            <span class="flex items-center justify-between text-os-text-muted mb-1">
+              <span>Model</span>
+              <Show when={isOllama()}>
+                <button
+                  type="button"
+                  class="text-[10px] px-2 py-0.5 rounded bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors disabled:opacity-50"
+                  disabled={probing()}
+                  onClick={() => void refreshOllamaTags()}
+                  title="Re-fetch installed models from Ollama"
+                >
+                  {probing() ? "Probing…" : "↻ Refresh installed"}
+                </button>
+              </Show>
+            </span>
             <Show
-              when={activePreset().suggestedModels.length > 0}
+              when={activePreset().suggestedModels.length > 0 || isOllama()}
               fallback={
                 <input
                   type="text"
@@ -368,16 +433,37 @@ const SettingsPanel: Component = () => {
                   setConfig({ model: v });
                 }}
               >
-                <For each={activePreset().suggestedModels}>
-                  {(m) => (
-                    <option value={m} selected={cfg().model === m}>
-                      {m}
-                    </option>
-                  )}
-                </For>
+                <Show
+                  when={isOllama() && ollamaModels().length > 0}
+                  fallback={
+                    <For each={activePreset().suggestedModels}>
+                      {(m) => (
+                        <option value={m} selected={cfg().model === m}>
+                          {m}
+                        </option>
+                      )}
+                    </For>
+                  }
+                >
+                  <For each={ollamaModels()}>
+                    {(m) => (
+                      <option value={m.name} selected={cfg().model === m.name}>
+                        {supportsToolCalling(m.name) ? "🛠️ " : "      "}
+                        {m.name}
+                        {" — "}
+                        {m.details.parameter_size}
+                      </option>
+                    )}
+                  </For>
+                </Show>
                 <option
                   value="__custom__"
-                  selected={!activePreset().suggestedModels.includes(cfg().model)}
+                  selected={
+                    isOllama()
+                      ? !ollamaModels().some((m) => m.name === cfg().model) &&
+                        !activePreset().suggestedModels.includes(cfg().model)
+                      : !activePreset().suggestedModels.includes(cfg().model)
+                  }
                 >
                   — custom (type below) —
                 </option>
@@ -389,6 +475,30 @@ const SettingsPanel: Component = () => {
                 placeholder="Override with any model id..."
                 class="w-full px-3 py-1.5 mt-1 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono text-[11px]"
               />
+            </Show>
+
+            <Show when={isOllama()}>
+              <Show when={ollamaProbe()?.ok}>
+                <span class="block text-[10px] text-os-text-muted mt-1">
+                  {ollamaModels().length} installed model
+                  {ollamaModels().length === 1 ? "" : "s"} detected.{" "}
+                  <span class="text-os-text">🛠️</span> = supports tool-calling.
+                </span>
+              </Show>
+              <Show when={ollamaProbe() && !ollamaProbe()!.ok}>
+                <span class="block text-[10px] text-amber-400 mt-1">
+                  Couldn't reach Ollama: {(ollamaProbe() as { error: string }).error}.{" "}
+                  {(ollamaProbe() as { hint: string }).hint} Falling back to the curated suggested
+                  list.
+                </span>
+              </Show>
+              <Show when={cfg().model && !selectedSupportsTools()}>
+                <span class="block text-[10px] text-amber-400 mt-1">
+                  ⚠️ <span class="font-mono">{cfg().model}</span> isn't on the known
+                  tool-calling list. Tool calls may be ignored or hallucinated. Recommended:
+                  llama3.1, qwen2.5, mistral-nemo, hermes3, command-r.
+                </span>
+              </Show>
             </Show>
           </label>
         </div>
