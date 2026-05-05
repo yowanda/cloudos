@@ -1,5 +1,6 @@
-import { hasPermission, type AppManifest } from "./app-manifest";
+import type { AppManifest, AppPermission } from "./app-manifest";
 import { notify } from "../stores/notification-store";
+import { requestPermission } from "./permissions";
 import {
   closeWindow,
   focusWindow,
@@ -37,6 +38,16 @@ function deny(method: string, perm: string): never {
   throw new Error(`Permission denied: ${method} requires '${perm}'`);
 }
 
+/**
+ * Gate a sandbox call on a runtime permission. Throws if denied —
+ * this includes the case where the manifest doesn't declare the
+ * permission at all (handled inside `requestPermission`).
+ */
+async function require(ctx: SandboxContext, method: string, perm: AppPermission): Promise<void> {
+  const ok = await requestPermission(ctx.manifest.id, perm);
+  if (!ok) deny(method, perm);
+}
+
 async function dispatch(ctx: SandboxContext, method: string, params: unknown): Promise<unknown> {
   const { manifest, windowId } = ctx;
   switch (method) {
@@ -47,7 +58,7 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
       return manifest;
 
     case "notify": {
-      if (!hasPermission(manifest.id, "notifications")) deny(method, "notifications");
+      await require(ctx, method, "notifications");
       const p = params as {
         title?: string;
         message?: string;
@@ -64,27 +75,27 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
     }
 
     case "windows.close":
-      if (!hasPermission(manifest.id, "windows")) deny(method, "windows");
+      await require(ctx, method, "windows");
       closeWindow(windowId);
       return { ok: true };
 
     case "windows.minimize":
-      if (!hasPermission(manifest.id, "windows")) deny(method, "windows");
+      await require(ctx, method, "windows");
       minimizeWindow(windowId);
       return { ok: true };
 
     case "windows.maximize":
-      if (!hasPermission(manifest.id, "windows")) deny(method, "windows");
+      await require(ctx, method, "windows");
       maximizeWindow(windowId);
       return { ok: true };
 
     case "windows.focus":
-      if (!hasPermission(manifest.id, "windows")) deny(method, "windows");
+      await require(ctx, method, "windows");
       focusWindow(windowId);
       return { ok: true };
 
     case "windows.list":
-      if (!hasPermission(manifest.id, "windows")) deny(method, "windows");
+      await require(ctx, method, "windows");
       return windowStore.windows.map((w) => ({
         id: w.id,
         appId: w.appId,
@@ -93,7 +104,7 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
       }));
 
     case "vfs.list": {
-      if (!hasPermission(manifest.id, "files.read")) deny(method, "files.read");
+      await require(ctx, method, "files.read");
       const p = params as { path?: string };
       const dir = p?.path ?? "/";
       return listDir(dir).map((e) => ({
@@ -108,7 +119,7 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
     }
 
     case "vfs.read": {
-      if (!hasPermission(manifest.id, "files.read")) deny(method, "files.read");
+      await require(ctx, method, "files.read");
       const p = params as { path?: string };
       if (!p?.path) throw new Error("vfs.read requires { path }");
       const entry = getEntry(p.path);
@@ -117,14 +128,14 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
     }
 
     case "vfs.exists": {
-      if (!hasPermission(manifest.id, "files.read")) deny(method, "files.read");
+      await require(ctx, method, "files.read");
       const p = params as { path?: string };
       if (!p?.path) throw new Error("vfs.exists requires { path }");
       return !!getEntry(p.path);
     }
 
     case "vfs.write": {
-      if (!hasPermission(manifest.id, "files.write")) deny(method, "files.write");
+      await require(ctx, method, "files.write");
       const p = params as { path?: string; content?: string };
       if (!p?.path) throw new Error("vfs.write requires { path, content }");
       // Split into parent + name; create directly under parent
@@ -140,7 +151,7 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
     }
 
     case "clipboard.read": {
-      if (!hasPermission(manifest.id, "clipboard.read")) deny(method, "clipboard.read");
+      await require(ctx, method, "clipboard.read");
       try {
         return await navigator.clipboard.readText();
       } catch (e) {
@@ -149,7 +160,7 @@ async function dispatch(ctx: SandboxContext, method: string, params: unknown): P
     }
 
     case "clipboard.write": {
-      if (!hasPermission(manifest.id, "clipboard.write")) deny(method, "clipboard.write");
+      await require(ctx, method, "clipboard.write");
       const p = params as { text?: string };
       try {
         await navigator.clipboard.writeText(p?.text ?? "");

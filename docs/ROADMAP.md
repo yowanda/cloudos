@@ -95,7 +95,7 @@
 - [x] Notification system
   - [x] Toast notifications
   - [x] Notification center panel
-  - [ ] Permission-based per app
+  - [x] Permission-based per app — runtime grant/deny via `requestPermission()`, persisted, revocable from Settings
 
 ---
 
@@ -175,10 +175,11 @@
 - [x] App manifest system
   - [x] AppManifest spec (`docs/APPS.md`) — id, version, icon, permissions, entry, window
   - [x] Permission system (notifications, files.read/write, windows, clipboard.read/write)
+  - [x] **First-use runtime permission prompts** — manifest declares; user grants/denies on first call; choice persisted in localStorage; revocable from Settings → Apps → Permissions; cleared on uninstall ([`core/permissions.ts`](../apps/desktop/src/core/permissions.ts), [`shell/PermissionPrompt.tsx`](../apps/desktop/src/shell/PermissionPrompt.tsx))
   - [x] Install / uninstall manifest at runtime, persisted to localStorage
 - [x] Sandboxed iframe apps
   - [x] Secure iframe sandbox (`sandbox="allow-scripts"` for inline, +allow-same-origin for URL)
-  - [x] postMessage IPC bridge with permission-checked dispatch
+  - [x] postMessage IPC bridge with two-stage permission gating (manifest declaration + runtime grant)
   - [x] OS API exposed (window.cloudos.{ping,notify,windows,vfs,clipboard,manifest})
 - [x] App Store
   - [x] Browse apps by category

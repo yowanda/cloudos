@@ -4,6 +4,7 @@ import Taskbar from "./shell/Taskbar";
 import Dock from "./shell/Dock";
 import { WindowLayer } from "./window/WindowLayer";
 import { ContextMenuLayer } from "./shell/ContextMenu";
+import PermissionPrompt from "./shell/PermissionPrompt";
 import { StartMenu } from "./shell/StartMenu";
 import { WindowSwitcher, openSwitcher, closeSwitcher, nextWindow } from "./window/WindowSwitcher";
 import { ThemeProvider } from "./theme/theme-provider";
@@ -169,6 +170,7 @@ const App: Component = () => {
         <WorkspaceOverlay />
         <LockScreen />
         <Spotlight />
+        <PermissionPrompt />
         <Show when={shareToken()}>
           {(t) => (
             <SharedFileViewer

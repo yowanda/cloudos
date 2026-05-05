@@ -5,6 +5,14 @@ import { notify } from "../stores/notification-store";
 import { profile, updateProfile, resetProfile } from "../stores/profile-store";
 import { recentApps, clearRecents } from "../stores/recents-store";
 import { listManifests, manifestsVersion, uninstallManifest } from "../core/app-manifest";
+import {
+  clearAppPermissions,
+  listAppPermissions,
+  permissionLabel,
+  permissionsVersion,
+  setPermissionState,
+  type PermissionDecision,
+} from "../core/permissions";
 import { listShortcuts, resetShortcut } from "../core/shortcut-manager";
 import { openWindow } from "../stores/window-store";
 import {
@@ -512,6 +520,97 @@ const AccountPage: Component = () => {
 };
 
 // ---------------------------------------------------------------------------
+// Apps → Permissions row. Lists all permissions a single manifest declares
+// and lets the user toggle Allow / Ask / Deny per perm.
+// ---------------------------------------------------------------------------
+const PermissionAppRow: Component<{ appId: string; name: string; icon: string }> = (props) => {
+  // Subscribe to the permissions signal so we re-render on grant/deny.
+  const perms = createMemo(() => {
+    void permissionsVersion();
+    return listAppPermissions(props.appId);
+  });
+
+  return (
+    <div class="rounded-lg border border-os-border p-3">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">{props.icon}</span>
+        <span class="font-medium text-[13px]">{props.name}</span>
+      </div>
+      <Show
+        when={perms().length > 0}
+        fallback={<p class="text-[11px] text-os-text-muted">Declares no permissions.</p>}
+      >
+        <div class="space-y-1.5">
+          <For each={perms()}>
+            {(item) => (
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-[11px] flex-1 min-w-0">
+                  <div class="text-os-text truncate">{permissionLabel(item.perm)}</div>
+                  <code class="text-[9px] text-os-text-muted">{item.perm}</code>
+                </div>
+                <div class="flex gap-1 flex-shrink-0">
+                  <PermStateButton
+                    label="Allow"
+                    active={item.state === "granted"}
+                    color="emerald"
+                    onClick={() => setPermissionState(props.appId, item.perm, "granted")}
+                  />
+                  <PermStateButton
+                    label="Ask"
+                    active={item.state === "ask"}
+                    color="zinc"
+                    onClick={() => setPermissionState(props.appId, item.perm, "ask")}
+                  />
+                  <PermStateButton
+                    label="Deny"
+                    active={item.state === "denied"}
+                    color="rose"
+                    onClick={() => setPermissionState(props.appId, item.perm, "denied")}
+                  />
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+const PermStateButton: Component<{
+  label: string;
+  active: boolean;
+  color: "emerald" | "zinc" | "rose";
+  onClick: () => void;
+}> = (props) => {
+  // Tailwind needs literal class strings — build via switch so the JIT
+  // sees them.
+  const cls = () => {
+    if (!props.active) return "border-os-border text-os-text-muted hover:bg-os-surface-hover";
+    switch (props.color) {
+      case "emerald": return "border-emerald-500/40 bg-emerald-500/15 text-emerald-300";
+      case "zinc":    return "border-zinc-500/40 bg-zinc-500/15 text-zinc-200";
+      case "rose":    return "border-rose-500/40 bg-rose-500/15 text-rose-300";
+    }
+  };
+  return (
+    <button
+      type="button"
+      class={`px-2 py-0.5 rounded text-[10px] border transition-colors ${cls()}`}
+      onClick={props.onClick}
+    >
+      {props.label}
+    </button>
+  );
+};
+
+// Silence the unused-type warning on PermissionDecision when we don't
+// reference it directly. The import is kept so `setPermissionState`'s
+// third argument typing flows through.
+const _decisionTypeBrand: PermissionDecision = "ask";
+void _decisionTypeBrand;
+
+// ---------------------------------------------------------------------------
 // Apps: list installed manifest apps + launch / uninstall, manage recents
 // ---------------------------------------------------------------------------
 const AppsPage: Component = () => {
@@ -523,6 +622,9 @@ const AppsPage: Component = () => {
   const handleUninstall = (id: string, name: string) => {
     if (!window.confirm(`Uninstall ${name}? This removes the manifest entry.`)) return;
     if (uninstallManifest(id)) {
+      // Forget any granted/denied perms for the uninstalled app — otherwise
+      // a future install of the same id would silently inherit them.
+      clearAppPermissions(id);
       notify({ title: "Uninstalled", message: name, type: "info", icon: "📦" });
     } else {
       notify({ title: "Uninstall failed", message: "Manifest not found", type: "warning", icon: "⚠️" });
@@ -571,6 +673,24 @@ const AppsPage: Component = () => {
                   </button>
                 </div>
               )}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <div class="pt-3 border-t border-os-border">
+        <h3 class="text-xs font-semibold mb-2">Permissions</h3>
+        <p class="text-[11px] text-os-text-muted mb-2">
+          Each manifest declares the permissions it can request. Apps prompt you the first
+          time they actually use one — your decision is remembered here. Reset to "Ask" to
+          re-prompt on next use.
+        </p>
+        <Show when={manifests().length > 0} fallback={
+          <p class="text-[11px] text-os-text-muted">No installed apps yet.</p>
+        }>
+          <div class="grid gap-2">
+            <For each={manifests()}>
+              {(m) => <PermissionAppRow appId={m.id} name={m.name} icon={m.icon} />}
             </For>
           </div>
         </Show>

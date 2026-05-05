@@ -68,8 +68,27 @@ The SDK is auto-injected into your iframe. Each call returns a Promise:
 | `cloudos.clipboard.write(s)`| `clipboard.write`      | `void`                       |
 | `cloudos.manifest()`       | none                    | your own `AppManifest`       |
 
-If a call throws `Permission denied`, your manifest didn't request the
-required permission. Update the `permissions` array and re-install.
+If a call throws `Permission denied`, either your manifest didn't declare
+the required permission, or the user explicitly denied it at runtime.
+
+## Permission model
+
+Permissions are gated in **two stages**:
+
+1. **Manifest declaration** — your app must list every permission it
+   might use in its `permissions` array. The bridge silently rejects any
+   undeclared permission, so users can audit installed apps before
+   running them.
+2. **Runtime grant** — the *first* time your app actually calls a method
+   that needs a permission, CloudOS shows the user a system-modal prompt
+   asking to **Allow** or **Deny**. The decision is persisted in
+   `localStorage` (key `cloudos:permissions:v1`) and reused for every
+   later call.
+
+Users can revisit grants in **Settings → Apps → Permissions** and switch
+any permission to *Allow*, *Ask* (re-prompt next use), or *Deny*.
+Permissions are also wiped when the app is uninstalled, so a fresh
+install of the same id starts with no implicit grants.
 
 ## Sandbox model
 

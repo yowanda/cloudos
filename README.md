@@ -37,13 +37,20 @@
 | Media Player | Audio + video playback, library with search/filter, drag/drop file import, shuffle, repeat (off/all/one), real seek/volume/mute |
 | Shortcuts | Browse, remap, and reset all keyboard shortcuts |
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
-| Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
+| Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge with **first-use permission prompts** (see "Per-app permissions" below) — full reference in [`docs/APPS.md`](./docs/APPS.md) |
 
 ### Settings & Start menu polish
 - **Start menu search & recents** — type to filter the app grid; `Enter` launches the top match. Recent launches show in their own row and are recorded across the Start menu, Dock, and Spotlight.
 - **Account page** — Display name, email, avatar emoji, and bio, stored in `cloudos:profile`. Reset clears the entry.
 - **Apps page** — Lists installed manifest apps with icon, version, and category. One-click Launch / Uninstall. Recents history is also browsable + clearable here.
 - **Keyboard page** — Quick read-only summary of every registered shortcut with a "↻ reset" link for any custom binding; "Open Shortcuts app" for the full editor.
+
+### Per-app permissions
+Manifest apps go through a two-stage permission gate, modelled on the browser's own `Notification.requestPermission()` flow:
+1. **Manifest declaration** — the app's manifest must list every permission it might use (`notifications`, `files.read`, `files.write`, `windows`, `clipboard.read`, `clipboard.write`). Anything else is rejected at the bridge.
+2. **Runtime grant** — the first time an app actually calls a method that needs a permission, CloudOS shows a system-modal prompt asking the user to **Allow** or **Deny**. The choice is persisted in `localStorage` and reused on every later call. Users can revisit decisions in **Settings → Apps → Permissions** (Allow / Ask / Deny tri-state). Uninstalling an app forgets all of its grants.
+
+The runtime gate lives in [`src/core/permissions.ts`](./apps/desktop/src/core/permissions.ts); the prompt component is [`src/shell/PermissionPrompt.tsx`](./apps/desktop/src/shell/PermissionPrompt.tsx).
 
 ### Terminal
 - **Local mode (default)** — built-in command parser with `help`, `ls`, `cat`, `cd`, `echo`, `pwd`, `whoami`, `uname`, `neofetch`, `date`, `uptime`, `history`, `clear`. Multi-tab, color theme.
