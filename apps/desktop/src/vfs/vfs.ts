@@ -8,9 +8,83 @@ export interface VFSEntry {
   children?: VFSEntry[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * Per-entry logical clock. Bumped on every mutation that touches
+   * this entry (create, write, rename, move). Monotonically increasing
+   * across the whole VFS, sourced from a single in-process counter
+   * (see `nextClock()` / `getLatestClock()`).
+   *
+   * Stage 1 of the per-entry diff sync feature — future stages will use
+   * the clock to send only entries whose clock advanced since the last
+   * push, and to detect 3-way merge conflicts on pull.
+   *
+   * Optional in the type for backward compat with snapshots produced by
+   * older builds; `importSnapshot` fills in `0` for missing values and
+   * bumps the global counter past any incoming max so subsequent local
+   * mutations always get a strictly greater clock.
+   */
+  clock?: number;
 }
 
 const fileSystem: Map<string, VFSEntry> = new Map();
+
+// ───── Logical clock (B31, stage 1 of per-entry diff sync) ──────────
+//
+// One monotonic counter per VM, bumped on every mutation. The counter
+// is persisted in localStorage so it survives reloads (otherwise after a
+// reload new local writes would clobber pre-reload writes that hadn't
+// synced yet). On `importSnapshot` we bump the local counter past the
+// max clock observed in the incoming snapshot, so subsequent local
+// mutations always get a strictly greater clock than anything pulled
+// from a remote.
+
+const CLOCK_KEY = "cloudos:vfs:clock";
+
+let latestClock: number = (() => {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = window.localStorage.getItem(CLOCK_KEY);
+    if (!raw) return 0;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+})();
+
+function persistClock() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CLOCK_KEY, String(latestClock));
+  } catch {
+    // ignore
+  }
+}
+
+/** Bump the global clock and return the new value. */
+function nextClock(): number {
+  latestClock++;
+  persistClock();
+  return latestClock;
+}
+
+/** Read-only access to the latest local clock value. */
+export function getLatestClock(): number {
+  return latestClock;
+}
+
+/**
+ * Return a shallow-cloned list of every entry whose clock is strictly
+ * greater than `since`. Stage-2 incremental push will use this; stage 1
+ * exposes it for tests and inspection.
+ */
+export function entriesChangedSince(since: number): VFSEntry[] {
+  const out: VFSEntry[] = [];
+  for (const e of fileSystem.values()) {
+    if ((e.clock ?? 0) > since) out.push({ ...e });
+  }
+  return out;
+}
 
 // ───── Quota ─────────────────────────────────────────────────────────
 //
@@ -122,8 +196,15 @@ export function exportSnapshot(): VFSEntry[] {
 
 export function importSnapshot(entries: VFSEntry[]): void {
   fileSystem.clear();
+  let maxClock = latestClock;
   for (const e of entries) {
-    fileSystem.set(e.path, { ...e });
+    const clock = typeof e.clock === "number" && Number.isFinite(e.clock) ? e.clock : 0;
+    if (clock > maxClock) maxClock = clock;
+    fileSystem.set(e.path, { ...e, clock });
+  }
+  if (maxClock > latestClock) {
+    latestClock = maxClock;
+    persistClock();
   }
   notifyFs();
 }
@@ -175,6 +256,7 @@ function initDefaultFS() {
       mimeType: "directory",
       createdAt: now,
       updatedAt: now,
+      clock: nextClock(),
     });
   }
 
@@ -209,6 +291,7 @@ function initDefaultFS() {
       content: f.content,
       createdAt: now,
       updatedAt: now,
+      clock: nextClock(),
     });
   }
 }
@@ -254,6 +337,7 @@ export function createFile(path: string, name: string, content = ""): VFSEntry {
     content,
     createdAt: now,
     updatedAt: now,
+    clock: nextClock(),
   };
   fileSystem.set(fullPath, entry);
   notifyFs();
@@ -275,6 +359,7 @@ export function writeFile(fullPath: string, content: string): VFSEntry | undefin
     existing.content = content;
     existing.size = content.length;
     existing.updatedAt = now;
+    existing.clock = nextClock();
     fileSystem.set(fullPath, existing);
     notifyFs();
     return existing;
@@ -294,6 +379,7 @@ export function writeFile(fullPath: string, content: string): VFSEntry | undefin
         mimeType: "directory",
         createdAt: now,
         updatedAt: now,
+        clock: nextClock(),
       });
     }
   }
@@ -306,6 +392,7 @@ export function writeFile(fullPath: string, content: string): VFSEntry | undefin
     content,
     createdAt: now,
     updatedAt: now,
+    clock: nextClock(),
   };
   fileSystem.set(fullPath, entry);
   notifyFs();
@@ -323,6 +410,7 @@ export function createDir(path: string, name: string): VFSEntry {
     mimeType: "directory",
     createdAt: now,
     updatedAt: now,
+    clock: nextClock(),
   };
   fileSystem.set(fullPath, entry);
   notifyFs();
@@ -402,6 +490,7 @@ export function restoreFromTrash(trashPath: string): VFSEntry | undefined {
     path: target,
     name: target.split("/").pop() ?? record.entry.name,
     updatedAt: Date.now(),
+    clock: nextClock(),
   };
   fileSystem.set(target, restored);
   trash.delete(trashPath);
@@ -503,12 +592,14 @@ export function moveEntry(srcPath: string, destDirPath: string): VFSEntry | unde
       entry.path = updatedPath;
       if (oldP === srcPath) entry.path = newPath;
       entry.updatedAt = Date.now();
+      entry.clock = nextClock();
       fileSystem.set(entry.path, entry);
     }
   } else {
     fileSystem.delete(srcPath);
     src.path = newPath;
     src.updatedAt = Date.now();
+    src.clock = nextClock();
     fileSystem.set(newPath, src);
   }
   notifyFs();
@@ -526,6 +617,7 @@ export function renameEntry(oldPath: string, newName: string): VFSEntry | undefi
   entry.name = newName;
   entry.path = newPath;
   entry.updatedAt = Date.now();
+  entry.clock = nextClock();
   fileSystem.set(newPath, entry);
   notifyFs();
   return entry;

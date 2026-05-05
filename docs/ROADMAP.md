@@ -136,7 +136,7 @@
   - [x] Unified switchable API layer (`vfs/sync.ts`) with debounced auto-save
 - [x] File sync
   - [x] Browser ↔ cloud snapshot sync (push + pull)
-  - [ ] Per-entry diff sync / conflict resolution
+  - [ ] Per-entry diff sync / conflict resolution _(stage 1 / clock metadata landed: every `VFSEntry` carries a monotonic `clock` field — bumped on every create / write / rename / move; persisted in `localStorage:cloudos:vfs:clock` so it survives reloads; `importSnapshot` advances the local counter past any incoming max so subsequent local writes are always strictly greater. New exports `getLatestClock()` / `entriesChangedSince(since)` will power stage 2's incremental push and stage 3's conflict UI. See `apps/desktop/src/vfs/vfs.ts`.)_
   - [x] **Offline support (Service Worker)** — `apps/desktop/public/sw.js` precaches the shell on install and uses a tiered fetch strategy: navigation requests are network-first with a cached `/` fallback, static assets (`/assets/`, JS / CSS / SVG / icons / fonts) are stale-while-revalidate, and API calls (`/api/`, `/auth/`, `/ws/`) are network-only so live data and auth tokens are never served from cache. The cache name is versioned (`cloudos-shell-v1`) so a new deploy purges the old cache on `activate`. Backed by `apps/desktop/public/manifest.webmanifest` (installable PWA: name, theme color, scope, icons) and `icon.svg` / `icon-maskable.svg`. Registration is gated to `import.meta.env.PROD` so the dev server's HMR isn't fighting the SW's caching.
 - [x] File sharing
   - [x] DB schema for shares (share token, permission, expiry)
