@@ -1,5 +1,19 @@
-import { Component, For, Show, createSignal } from "solid-js";
-import { listDir, getEntry, createFile, createDir, deleteEntry, renameEntry, formatSize, type VFSEntry } from "../vfs/vfs";
+import { Component, For, Show, createSignal, onCleanup, onMount } from "solid-js";
+import {
+  listDir,
+  createFile,
+  createDir,
+  renameEntry,
+  formatSize,
+  moveToTrash,
+  listTrash,
+  restoreFromTrash,
+  permanentDelete,
+  emptyTrash,
+  subscribeTrash,
+  type VFSEntry,
+  type TrashEntry,
+} from "../vfs/vfs";
 import { showContextMenu } from "../stores/contextmenu-store";
 import { openWindow } from "../stores/window-store";
 import { notify } from "../stores/notification-store";
@@ -22,19 +36,37 @@ const FileIcon: Component<{ entry: VFSEntry }> = (props) => {
 const FileManager: Component<{ windowId: string }> = () => {
   const [currentPath, setCurrentPath] = createSignal("/");
   const [entries, setEntries] = createSignal<VFSEntry[]>([]);
+  const [trashEntries, setTrashEntries] = createSignal<TrashEntry[]>(listTrash());
   const [selectedPath, setSelectedPath] = createSignal<string | null>(null);
   const [viewMode, setViewMode] = createSignal<"grid" | "list">("grid");
   const [renamingPath, setRenamingPath] = createSignal<string | null>(null);
   const [renameValue, setRenameValue] = createSignal("");
   const [isDragOver, setIsDragOver] = createSignal(false);
 
-  const refresh = () => setEntries(listDir(currentPath()));
+  const inTrash = () => currentPath() === "/Trash";
+
+  const refresh = () => {
+    if (inTrash()) {
+      setTrashEntries(listTrash());
+    } else {
+      setEntries(listDir(currentPath()));
+    }
+  };
   refresh();
+
+  onMount(() => {
+    const unsub = subscribeTrash(() => setTrashEntries(listTrash()));
+    onCleanup(unsub);
+  });
 
   const navigate = (path: string) => {
     setCurrentPath(path);
     setSelectedPath(null);
-    setEntries(listDir(path));
+    if (path === "/Trash") {
+      setTrashEntries(listTrash());
+    } else {
+      setEntries(listDir(path));
+    }
   };
 
   const goUp = () => {
@@ -57,6 +89,48 @@ const FileManager: Component<{ windowId: string }> = () => {
     }
   };
 
+  const handleTrashContextMenu = (e: MouseEvent, t?: TrashEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (t) {
+      setSelectedPath(t.entry.path);
+      showContextMenu(e.clientX, e.clientY, [
+        {
+          label: "Restore",
+          icon: "↩️",
+          action: () => {
+            restoreFromTrash(t.entry.path);
+            refresh();
+            notify({ title: "Restored", message: `${t.entry.name} restored to ${t.originalPath}`, type: "success", icon: "↩️" });
+          },
+        },
+        { separator: true, label: "" },
+        {
+          label: "Delete Permanently",
+          icon: "✕",
+          action: () => {
+            permanentDelete(t.entry.path);
+            refresh();
+          },
+        },
+      ]);
+    } else {
+      showContextMenu(e.clientX, e.clientY, [
+        {
+          label: "Empty Trash",
+          icon: "🗑️",
+          disabled: trashEntries().length === 0,
+          action: () => {
+            const count = trashEntries().length;
+            emptyTrash();
+            refresh();
+            notify({ title: "Trash Emptied", message: `${count} item(s) permanently deleted`, type: "info", icon: "🗑️" });
+          },
+        },
+      ]);
+    }
+  };
+
   const handleContextMenu = (e: MouseEvent, entry?: VFSEntry) => {
     e.preventDefault();
     e.stopPropagation();
@@ -67,7 +141,15 @@ const FileManager: Component<{ windowId: string }> = () => {
         { label: "Open", icon: "📂", action: () => handleDoubleClick(entry) },
         { label: "Rename", icon: "✏️", action: () => { setRenamingPath(entry.path); setRenameValue(entry.name); } },
         { separator: true, label: "" },
-        { label: "Delete", icon: "🗑️", action: () => { deleteEntry(entry.path); refresh(); } },
+        {
+          label: "Move to Trash",
+          icon: "🗑️",
+          action: () => {
+            moveToTrash(entry.path);
+            refresh();
+            notify({ title: "Moved to Trash", message: entry.name, type: "info", icon: "🗑️" });
+          },
+        },
       ]);
     } else {
       showContextMenu(e.clientX, e.clientY, [
@@ -108,6 +190,17 @@ const FileManager: Component<{ windowId: string }> = () => {
     { name: "Videos", path: "/Videos", icon: "🎬" },
   ];
 
+  const formatTimeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ago`;
+  };
+
   return (
     <div class="flex h-full text-os-text text-xs select-none">
       {/* Sidebar */}
@@ -128,6 +221,23 @@ const FileManager: Component<{ windowId: string }> = () => {
             </button>
           )}
         </For>
+        <div class="mt-3 pt-2 border-t border-os-border">
+          <p class="text-[10px] text-os-text-muted uppercase tracking-wider mb-2 px-2">System</p>
+          <button
+            class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors text-left"
+            classList={{
+              "bg-os-accent/20 text-os-accent-hover": inTrash(),
+              "hover:bg-os-surface-hover text-os-text": !inTrash(),
+            }}
+            onClick={() => navigate("/Trash")}
+          >
+            <span class="text-sm">🗑️</span>
+            <span class="flex-1">Trash</span>
+            <Show when={trashEntries().length > 0}>
+              <span class="text-[10px] text-os-text-muted">{trashEntries().length}</span>
+            </Show>
+          </button>
+        </div>
       </div>
 
       {/* Main Area */}
@@ -170,14 +280,36 @@ const FileManager: Component<{ windowId: string }> = () => {
           </button>
         </div>
 
+        {/* Trash banner */}
+        <Show when={inTrash()}>
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-os-border bg-os-warning/10 text-[11px]">
+            <span class="text-os-text-muted">
+              Items in Trash are kept until you empty it. Right-click an item to restore.
+            </span>
+            <button
+              class="px-2 py-0.5 rounded bg-os-danger/20 text-os-danger hover:bg-os-danger/30 transition-colors disabled:opacity-30 disabled:hover:bg-os-danger/20"
+              disabled={trashEntries().length === 0}
+              onClick={() => {
+                const count = trashEntries().length;
+                emptyTrash();
+                refresh();
+                notify({ title: "Trash Emptied", message: `${count} item(s) permanently deleted`, type: "info", icon: "🗑️" });
+              }}
+            >
+              Empty Trash
+            </button>
+          </div>
+        </Show>
+
         {/* File listing */}
         <div
           class="flex-1 overflow-y-auto p-2 transition-colors"
-          classList={{ "bg-os-accent/10 ring-2 ring-inset ring-os-accent/30 rounded-lg": isDragOver() }}
-          onContextMenu={(e) => handleContextMenu(e)}
-          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+          classList={{ "bg-os-accent/10 ring-2 ring-inset ring-os-accent/30 rounded-lg": isDragOver() && !inTrash() }}
+          onContextMenu={(e) => (inTrash() ? handleTrashContextMenu(e) : handleContextMenu(e))}
+          onDragOver={(e) => { if (!inTrash()) { e.preventDefault(); setIsDragOver(true); } }}
           onDragLeave={() => setIsDragOver(false)}
           onDrop={(e) => {
+            if (inTrash()) return;
             e.preventDefault();
             setIsDragOver(false);
             const files = e.dataTransfer?.files;
@@ -200,13 +332,69 @@ const FileManager: Component<{ windowId: string }> = () => {
             }
           }}
         >
-          <Show when={entries().length === 0}>
+          {/* Trash view */}
+          <Show when={inTrash()}>
+            <Show when={trashEntries().length === 0} fallback={
+              <div class="flex flex-col gap-1">
+                <For each={trashEntries()}>
+                  {(t) => (
+                    <div
+                      class="flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors"
+                      classList={{
+                        "bg-os-accent/20": selectedPath() === t.entry.path,
+                        "hover:bg-os-surface-hover": selectedPath() !== t.entry.path,
+                      }}
+                      onClick={(e) => { e.stopPropagation(); setSelectedPath(t.entry.path); }}
+                      onContextMenu={(e) => handleTrashContextMenu(e, t)}
+                    >
+                      <FileIcon entry={t.entry} />
+                      <div class="flex-1 min-w-0">
+                        <div class="truncate">{t.entry.name}</div>
+                        <div class="text-[10px] text-os-text-muted truncate">from {t.originalPath}</div>
+                      </div>
+                      <span class="w-20 text-right text-[10px] text-os-text-muted">{formatSize(t.entry.size)}</span>
+                      <span class="w-20 text-right text-[10px] text-os-text-muted">{formatTimeAgo(t.deletedAt)}</span>
+                      <button
+                        class="px-2 py-1 rounded text-[10px] hover:bg-os-success/20 hover:text-os-success transition-colors"
+                        title="Restore"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          restoreFromTrash(t.entry.path);
+                          refresh();
+                        }}
+                      >
+                        Restore
+                      </button>
+                      <button
+                        class="px-2 py-1 rounded text-[10px] hover:bg-os-danger/20 hover:text-os-danger transition-colors"
+                        title="Delete permanently"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          permanentDelete(t.entry.path);
+                          refresh();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            }>
+              <div class="flex flex-col items-center justify-center h-full text-os-text-muted gap-2">
+                <span class="text-4xl opacity-40">🗑️</span>
+                <span>Trash is empty</span>
+              </div>
+            </Show>
+          </Show>
+
+          <Show when={!inTrash() && entries().length === 0}>
             <div class="flex items-center justify-center h-full text-os-text-muted">
               This folder is empty
             </div>
           </Show>
 
-          <Show when={viewMode() === "grid"}>
+          <Show when={!inTrash() && viewMode() === "grid"}>
             <div class="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-1">
               <For each={entries()}>
                 {(entry) => (
@@ -240,7 +428,7 @@ const FileManager: Component<{ windowId: string }> = () => {
             </div>
           </Show>
 
-          <Show when={viewMode() === "list"}>
+          <Show when={!inTrash() && viewMode() === "list"}>
             <div class="flex flex-col">
               <div class="flex items-center gap-2 px-3 py-1 text-[10px] text-os-text-muted uppercase border-b border-os-border">
                 <span class="flex-1">Name</span>
@@ -274,9 +462,8 @@ const FileManager: Component<{ windowId: string }> = () => {
 
         {/* Status Bar */}
         <div class="flex items-center px-3 py-1 border-t border-os-border text-[10px] text-os-text-muted">
-          <span>{entries().length} items</span>
-          <Show when={selectedPath()}>
-            <span class="ml-auto">{getEntry(selectedPath()!)?.name}</span>
+          <Show when={inTrash()} fallback={<span>{entries().length} items</span>}>
+            <span>{trashEntries().length} items in trash</span>
           </Show>
         </div>
       </div>

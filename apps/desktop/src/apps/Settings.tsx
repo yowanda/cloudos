@@ -1,7 +1,11 @@
-import { Component, For, createSignal, Show } from "solid-js";
+import { Component, For, createSignal, Show, onCleanup, onMount } from "solid-js";
 import { theme, setTheme, accentColor, setAccentColor, wallpaper, setWallpaper } from "../stores/theme-store";
+import { vfsStats, formatSize, emptyTrash, subscribeTrash, type VFSStats } from "../vfs/vfs";
+import { notify } from "../stores/notification-store";
 
-type SettingsPage = "appearance" | "wallpaper" | "about";
+type SettingsPage = "appearance" | "wallpaper" | "storage" | "about";
+
+const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB demo quota
 
 const accentColors = [
   { name: "Indigo", value: "#6366f1" },
@@ -32,12 +36,25 @@ const wallpapers = [
 
 const Settings: Component<{ windowId: string }> = () => {
   const [page, setPage] = createSignal<SettingsPage>("appearance");
+  const [stats, setStats] = createSignal<VFSStats>(vfsStats());
+
+  const refreshStats = () => setStats(vfsStats());
+
+  onMount(() => {
+    refreshStats();
+    const unsub = subscribeTrash(refreshStats);
+    onCleanup(unsub);
+  });
 
   const sidebarItems: { id: SettingsPage; label: string; icon: string }[] = [
     { id: "appearance", label: "Appearance", icon: "🎨" },
     { id: "wallpaper", label: "Wallpaper", icon: "🖼️" },
+    { id: "storage", label: "Storage", icon: "💾" },
     { id: "about", label: "About", icon: "ℹ️" },
   ];
+
+  const usedBytes = () => stats().totalBytes + stats().trashBytes;
+  const usedPct = () => Math.min(100, (usedBytes() / STORAGE_QUOTA_BYTES) * 100);
 
   return (
     <div class="flex h-full text-xs">
@@ -142,6 +159,99 @@ const Settings: Component<{ windowId: string }> = () => {
                 </button>
               )}
             </For>
+          </div>
+        </Show>
+
+        <Show when={page() === "storage"}>
+          <h2 class="text-sm font-semibold mb-4">Storage</h2>
+
+          {/* Quota gauge */}
+          <div class="mb-6">
+            <div class="flex items-end justify-between mb-2">
+              <div>
+                <div class="text-os-text">{formatSize(usedBytes())} <span class="text-os-text-muted">used</span></div>
+                <div class="text-[10px] text-os-text-muted">of {formatSize(STORAGE_QUOTA_BYTES)} quota</div>
+              </div>
+              <div class="text-[10px] text-os-text-muted">{usedPct().toFixed(2)}%</div>
+            </div>
+            <div class="h-2 rounded-full bg-os-surface overflow-hidden">
+              <div
+                class="h-full transition-all"
+                classList={{
+                  "bg-os-accent": usedPct() < 75,
+                  "bg-os-warning": usedPct() >= 75 && usedPct() < 90,
+                  "bg-os-danger": usedPct() >= 90,
+                }}
+                style={{ width: `${Math.max(0.5, usedPct())}%` }}
+              />
+            </div>
+            <Show when={usedPct() >= 75}>
+              <p class="text-[10px] text-os-warning mt-2">
+                You're using a lot of storage. Consider emptying trash or removing unused files.
+              </p>
+            </Show>
+          </div>
+
+          {/* Top folder usage */}
+          <div class="mb-6">
+            <h3 class="text-os-text-muted mb-2">By folder</h3>
+            <Show when={stats().byFolder.length > 0} fallback={
+              <p class="text-[10px] text-os-text-muted">No files yet.</p>
+            }>
+              <div class="space-y-1.5">
+                <For each={stats().byFolder}>
+                  {(f) => (
+                    <div class="flex items-center gap-2">
+                      <span class="w-32 truncate">{f.path}</span>
+                      <div class="flex-1 h-1.5 rounded-full bg-os-surface overflow-hidden">
+                        <div
+                          class="h-full bg-os-accent"
+                          style={{ width: `${stats().totalBytes > 0 ? (f.bytes / stats().totalBytes) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span class="w-20 text-right text-os-text-muted">{formatSize(f.bytes)}</span>
+                      <span class="w-10 text-right text-[10px] text-os-text-muted">{f.count}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Counts */}
+          <div class="grid grid-cols-3 gap-2 mb-6">
+            <div class="rounded-lg border border-os-border p-3">
+              <div class="text-[10px] text-os-text-muted">Files</div>
+              <div class="text-base font-semibold mt-1">{stats().fileCount}</div>
+            </div>
+            <div class="rounded-lg border border-os-border p-3">
+              <div class="text-[10px] text-os-text-muted">Folders</div>
+              <div class="text-base font-semibold mt-1">{stats().dirCount}</div>
+            </div>
+            <div class="rounded-lg border border-os-border p-3">
+              <div class="text-[10px] text-os-text-muted">In Trash</div>
+              <div class="text-base font-semibold mt-1">{stats().trashCount}</div>
+            </div>
+          </div>
+
+          {/* Trash actions */}
+          <div class="rounded-lg border border-os-border p-3 flex items-center justify-between">
+            <div>
+              <div>Trash uses {formatSize(stats().trashBytes)}</div>
+              <div class="text-[10px] text-os-text-muted">Items removed from Trash cannot be restored.</div>
+            </div>
+            <button
+              class="px-3 py-1.5 rounded bg-os-danger/20 text-os-danger hover:bg-os-danger/30 transition-colors disabled:opacity-30 disabled:hover:bg-os-danger/20"
+              disabled={stats().trashCount === 0}
+              onClick={() => {
+                const count = stats().trashCount;
+                emptyTrash();
+                refreshStats();
+                notify({ title: "Trash Emptied", message: `${count} item(s) permanently deleted`, type: "info", icon: "🗑️" });
+              }}
+            >
+              Empty Trash
+            </button>
           </div>
         </Show>
 

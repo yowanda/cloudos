@@ -82,7 +82,7 @@
   - [x] Appearance (theme, accent color)
   - [x] Wallpaper picker (12 gradient wallpapers)
   - [ ] Account (profile, password)
-  - [ ] Storage (usage, quota)
+  - [x] Storage (usage, quota, trash management)
   - [ ] Apps (installed, defaults)
   - [ ] Keyboard shortcuts
   - [x] About (system info)
@@ -136,10 +136,10 @@
   - [ ] Meilisearch integration
   - [ ] Full-text file search
   - [ ] Search UI in taskbar
-- [ ] Storage management
-  - [ ] Usage dashboard
-  - [ ] Trash / recycle bin
-  - [ ] Quota warnings
+- [x] Storage management
+  - [x] Usage dashboard (Settings → Storage: per-folder breakdown, file/folder counts)
+  - [x] Trash / recycle bin (move to trash, restore, permanent delete, empty trash, persisted)
+  - [x] Quota warnings (warning at 75%, danger at 90%)
 
 ---
 
