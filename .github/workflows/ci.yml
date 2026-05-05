@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # Force JS-based actions (checkout@v4, setup-buildx, build-push, etc.) to run
+  # on Node.js 24 instead of the deprecated Node.js 20.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
