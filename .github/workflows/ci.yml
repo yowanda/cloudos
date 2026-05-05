@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   desktop:
-    name: Frontend (build)
+    name: Frontend (build + test)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,6 +34,8 @@ jobs:
         run: pnpm install --frozen-lockfile=false
       - name: Build
         run: pnpm turbo build
+      - name: Test
+        run: pnpm --filter @cloudos/desktop test
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
@@ -42,7 +44,7 @@ jobs:
           if-no-files-found: error
 
   server:
-    name: Backend (build + vet)
+    name: Backend (build + vet + test)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -58,6 +60,8 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
+      - name: Test
+        run: go test ./...
 
   docker:
     name: Docker images (build only)

@@ -1,0 +1,52 @@
+# Pre-commit hooks for CloudOS.
+#
+# Install once with:
+#   pip install pre-commit && pre-commit install
+#
+# After that, the hooks run on every `git commit`. Skip occasionally
+# with `git commit --no-verify` only when you're certain you know
+# what you're doing.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^apps/desktop/dist/|\.svg$
+      - id: end-of-file-fixer
+        exclude: ^apps/desktop/dist/|\.svg$
+      - id: check-yaml
+      - id: check-json
+        exclude: ^apps/desktop/tsconfig.*\.json$  # tsconfig allows comments
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: local
+    hooks:
+      # Frontend: Biome (no auto-fix in pre-commit — keep changes
+      # explicit so reviewers see them). Runs only on staged files.
+      - id: biome-check
+        name: Biome lint (frontend)
+        entry: bash -c 'cd apps/desktop && pnpm exec biome check --no-errors-on-unmatched "$@"' --
+        language: system
+        files: ^apps/desktop/src/.*\.(ts|tsx|js|jsx|json|css)$
+        pass_filenames: true
+
+      # Backend: go vet on the whole module on any .go change.
+      - id: go-vet
+        name: go vet (backend)
+        entry: bash -c 'cd apps/server && go vet ./...'
+        language: system
+        files: ^apps/server/.*\.go$
+        pass_filenames: false
+
+      # Backend: gofmt -l should produce no output.
+      - id: go-fmt
+        name: gofmt (backend)
+        entry: bash -c 'cd apps/server && unformatted=$(gofmt -l .); if [ -n "$unformatted" ]; then echo "gofmt would change:"; echo "$unformatted"; exit 1; fi'
+        language: system
+        files: ^apps/server/.*\.go$
+        pass_filenames: false
