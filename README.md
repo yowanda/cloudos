@@ -222,6 +222,19 @@ cloudos/
 
 ---
 
+## Documentation
+
+| Doc                                       | What's inside                                              |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| [Getting Started](./docs/GETTING_STARTED.md) | Clone → run, frontend-only and full-stack flows         |
+| [Architecture](./docs/ARCHITECTURE.md)    | High-level layout of the desktop, server, stores, IPC      |
+| [API reference](./docs/API.md)            | All `/api/v1/*` endpoints, request/response shapes         |
+| [Building apps](./docs/APP_DEV.md)        | Manifest format + sandbox SDK for third-party apps         |
+| [Self-hosting](./docs/SELF_HOSTING.md)    | Production VPS deployment, backups, hardening checklist    |
+| [Theming](./docs/THEMING.md)              | Design tokens, palettes, wallpapers, manifest theming      |
+| [App protocol](./docs/APPS.md)            | Wire-level IPC details for sandboxed manifest apps         |
+| [Roadmap](./docs/ROADMAP.md)              | Phase-by-phase progress tracker                            |
+
 ## Roadmap
 
 See [ROADMAP.md](./docs/ROADMAP.md) for the full development roadmap.

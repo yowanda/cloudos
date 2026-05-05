@@ -146,6 +146,13 @@
   - [x] Caddy reverse-proxy templates (production + local TLS)
   - [x] Backup script (`deploy/backup.sh`: pg_dump + mc mirror + VFS, retention)
 
+- [x] Documentation
+  - [x] Getting Started (`docs/GETTING_STARTED.md`)
+  - [x] API reference (`docs/API.md`)
+  - [x] App developer guide (`docs/APP_DEV.md`)
+  - [x] Self-hosting guide (`docs/SELF_HOSTING.md`)
+  - [x] Theming guide (`docs/THEMING.md`)
+
 - [x] Storage management
   - [x] Usage dashboard (Settings → Storage: per-folder breakdown, file/folder counts)
   - [x] Trash / recycle bin (move to trash, restore, permanent delete, empty trash, persisted)
