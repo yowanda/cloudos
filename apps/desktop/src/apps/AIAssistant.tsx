@@ -10,32 +10,25 @@ import {
   selectConversation,
   sendMessage,
   setConfig,
-  type AIProvider,
 } from "../stores/ai-store";
+import { PROVIDER_PRESETS, findPresetById, type ProviderPreset } from "../stores/ai-provider-presets";
 
-const providerLabels: Record<AIProvider, string> = {
-  echo: "Echo (offline mock)",
-  openai: "OpenAI",
-  "openai-compatible": "OpenAI-compatible",
-  ollama: "Ollama (local)",
-  anthropic: "Anthropic Claude",
-};
-
-const presetBaseUrls: Record<AIProvider, string> = {
-  echo: "",
-  openai: "https://api.openai.com/v1",
-  "openai-compatible": "http://localhost:8080/v1",
-  ollama: "http://localhost:11434",
-  anthropic: "https://api.anthropic.com",
-};
-
-const presetModels: Record<AIProvider, string> = {
-  echo: "",
-  openai: "gpt-4o-mini",
-  "openai-compatible": "llama3",
-  ollama: "llama3",
-  anthropic: "claude-3-5-sonnet-latest",
-};
+/**
+ * Pick the preset whose `baseUrl` + `providerType` matches the live
+ * config — used to seed the dropdown so re-opening Settings shows the
+ * preset the user picked last time.
+ */
+function detectActivePreset(cfg: { provider: string; baseUrl: string }): string {
+  const exact = PROVIDER_PRESETS.find(
+    (p) => p.providerType === cfg.provider && p.baseUrl === cfg.baseUrl,
+  );
+  if (exact) return exact.id;
+  // Fall back to first preset matching just the provider type — the
+  // user may have customised the base URL.
+  const byType = PROVIDER_PRESETS.find((p) => p.providerType === cfg.provider);
+  if (byType) return byType.id;
+  return "echo";
+}
 
 const AIAssistant: Component<{ windowId: string }> = () => {
   const [tab, setTab] = createSignal<"chat" | "settings">("chat");
@@ -163,7 +156,12 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                 />
               )}
             </Show>
-            <span class="text-[10px] text-os-text-muted">{providerLabels[config().provider]}</span>
+            <span class="text-[10px] text-os-text-muted">
+              {(() => {
+                const p = findPresetById(detectActivePreset(config()));
+                return p ? `${p.icon} ${p.label}` : config().provider;
+              })()}
+            </span>
           </div>
 
           {/* Messages */}
@@ -176,7 +174,9 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                   <p class="font-medium text-os-text">CloudOS Assistant</p>
                   <p class="text-[11px] mt-1">
                     Pluggable LLM chat. Default provider is the offline <strong>Echo</strong> mock —
-                    pick a real provider in the ⚙ Settings tab.
+                    pick a real provider in the ⚙ Settings tab. Free presets ready to plug in:
+                    <strong> Akash, Groq, OpenRouter, Gemini, Cerebras, Together, Mistral, HuggingFace</strong>,
+                    or run fully local with Ollama.
                   </p>
                   <p class="text-[11px] mt-3">
                     Try a slash command — they work in <em>every</em> mode (no API key needed):
@@ -262,34 +262,63 @@ const AIAssistant: Component<{ windowId: string }> = () => {
 
 const SettingsPanel: Component = () => {
   const cfg = config;
+  const activePresetId = createMemo(() => detectActivePreset(cfg()));
+  const activePreset = createMemo<ProviderPreset>(
+    () => findPresetById(activePresetId()) ?? PROVIDER_PRESETS[0],
+  );
+
+  const applyPreset = (preset: ProviderPreset) => {
+    setConfig({
+      provider: preset.providerType,
+      baseUrl: preset.baseUrl,
+      model: preset.defaultModel,
+    });
+  };
+
   return (
     <div class="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
       <h2 class="text-sm font-semibold">Provider</h2>
-      <div class="grid grid-cols-2 gap-2">
-        <For each={Object.entries(providerLabels) as [AIProvider, string][]}>
-          {([id, label]) => (
-            <button
-              class="px-3 py-2 rounded-lg border text-left transition-colors"
-              classList={{
-                "bg-os-accent text-white border-os-accent": cfg().provider === id,
-                "border-os-border hover:bg-os-surface-hover": cfg().provider !== id,
-              }}
-              onClick={() =>
-                setConfig({
-                  provider: id,
-                  baseUrl: presetBaseUrls[id] || cfg().baseUrl,
-                  model: presetModels[id] || cfg().model,
-                })
-              }
-            >
-              <div class="font-medium">{label}</div>
-              <div class="text-[10px] opacity-80">{presetBaseUrls[id] || "no remote endpoint"}</div>
-            </button>
-          )}
-        </For>
-      </div>
+      <p class="text-[10px] text-os-text-muted">
+        Pick a preset to auto-fill base URL + model. Most providers are <strong>free</strong> after
+        signup — click the link inside each preset to grab a key. Your key is stored only in this
+        browser's localStorage and is never sent anywhere except the configured endpoint.
+      </p>
 
-      <Show when={cfg().provider !== "echo"}>
+      {/* Preset dropdown — most-relevant view */}
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Quick start preset</span>
+        <select
+          class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+          value={activePresetId()}
+          onChange={(e) => {
+            const p = findPresetById(e.currentTarget.value);
+            if (p) applyPreset(p);
+          }}
+        >
+          <For each={PROVIDER_PRESETS}>
+            {(p) => (
+              <option value={p.id}>
+                {p.icon} {p.label}
+                {p.requiresKey ? "" : " — no key needed"}
+              </option>
+            )}
+          </For>
+        </select>
+        <span class="block text-[10px] text-os-text-muted mt-1">{activePreset().description}</span>
+      </label>
+
+      <Show when={activePreset().signupUrl}>
+        <a
+          href={activePreset().signupUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block px-3 py-1.5 rounded bg-os-accent text-white text-[11px] hover:bg-os-accent-hover transition-colors"
+        >
+          {activePreset().requiresKey ? "Get free API key →" : "Open download / signup page →"}
+        </a>
+      </Show>
+
+      <Show when={activePreset().providerType !== "echo"}>
         <div class="space-y-2">
           <label class="block">
             <span class="block text-os-text-muted mb-1">Base URL</span>
@@ -297,32 +326,64 @@ const SettingsPanel: Component = () => {
               type="text"
               value={cfg().baseUrl}
               onInput={(e) => setConfig({ baseUrl: e.currentTarget.value })}
-              class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+              class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono"
             />
           </label>
-          <Show when={cfg().provider !== "ollama"}>
+
+          <Show when={activePreset().requiresKey}>
             <label class="block">
               <span class="block text-os-text-muted mb-1">API key</span>
               <input
                 type="password"
                 value={cfg().apiKey}
                 onInput={(e) => setConfig({ apiKey: e.currentTarget.value })}
-                placeholder="sk-..."
-                class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+                placeholder="sk-... / your-api-key"
+                class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono"
               />
               <span class="block text-[10px] text-os-text-muted mt-1">
-                Stored only in your browser's localStorage. Clear browser data to remove.
+                Stored only in your browser's localStorage. Clear browser data to remove. Not synced
+                to the CloudOS backend.
               </span>
             </label>
           </Show>
+
           <label class="block">
             <span class="block text-os-text-muted mb-1">Model</span>
-            <input
-              type="text"
-              value={cfg().model}
-              onInput={(e) => setConfig({ model: e.currentTarget.value })}
-              class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
-            />
+            <Show
+              when={activePreset().suggestedModels.length > 0}
+              fallback={
+                <input
+                  type="text"
+                  value={cfg().model}
+                  onInput={(e) => setConfig({ model: e.currentTarget.value })}
+                  class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono"
+                />
+              }
+            >
+              <select
+                class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono"
+                value={
+                  activePreset().suggestedModels.includes(cfg().model) ? cfg().model : "__custom__"
+                }
+                onChange={(e) => {
+                  const v = e.currentTarget.value;
+                  if (v === "__custom__") return;
+                  setConfig({ model: v });
+                }}
+              >
+                <For each={activePreset().suggestedModels}>
+                  {(m) => <option value={m}>{m}</option>}
+                </For>
+                <option value="__custom__">— custom (type below) —</option>
+              </select>
+              <input
+                type="text"
+                value={cfg().model}
+                onInput={(e) => setConfig({ model: e.currentTarget.value })}
+                placeholder="Override with any model id..."
+                class="w-full px-3 py-1.5 mt-1 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono text-[11px]"
+              />
+            </Show>
           </label>
         </div>
       </Show>
@@ -338,8 +399,10 @@ const SettingsPanel: Component = () => {
       </label>
 
       <p class="text-[10px] text-os-text-muted">
-        Echo provider runs entirely in-browser and is useful for offline demos. The other providers
-        send your messages directly from the browser to the configured endpoint.
+        Echo and Ollama run without external network calls (Ollama runs locally on your machine).
+        All other providers send your prompts directly from this browser to the configured
+        endpoint. Slash commands (<code>/help</code>, <code>/read</code>, <code>/ls</code>,
+        <code>/conflicts</code>, …) work in every mode and never invoke the LLM.
       </p>
     </div>
   );
