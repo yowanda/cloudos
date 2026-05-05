@@ -10,7 +10,14 @@ import { WindowSwitcher, openSwitcher, closeSwitcher, nextWindow } from "./windo
 import { ThemeProvider } from "./theme/theme-provider";
 import { registerShortcut, initShortcuts } from "./core/shortcut-manager";
 import { toggleStartMenu } from "./stores/startmenu-store";
-import { currentDesktopWindows, minimizeWindow } from "./stores/window-store";
+import {
+  currentDesktopWindows,
+  minimizeWindow,
+  snapFocusedWindow,
+  toggleFocusedMaximize,
+  minimizeFocusedWindow,
+} from "./stores/window-store";
+import type { SnapZone } from "@cloudos/shared";
 import { registerAllApps } from "./apps";
 import LockScreen from "./shell/LockScreen";
 import { lockScreen } from "./stores/auth-store";
@@ -133,6 +140,54 @@ const App: Component = () => {
           if (target) switchDesktop(target.id);
         },
         description: `Switch to workspace ${i}`,
+      });
+    }
+
+    // Win+Arrow: snap focused window to halves; Win+Up maximize / Win+Down minimize
+    const snapHalf: Record<"left" | "right", SnapZone> = { left: "left", right: "right" };
+    registerShortcut({
+      id: "window.snap.left",
+      key: "ArrowLeft",
+      metaOnly: true,
+      handler: () => snapFocusedWindow(snapHalf.left),
+      description: "Snap window to left half",
+    });
+    registerShortcut({
+      id: "window.snap.right",
+      key: "ArrowRight",
+      metaOnly: true,
+      handler: () => snapFocusedWindow(snapHalf.right),
+      description: "Snap window to right half",
+    });
+    registerShortcut({
+      id: "window.snap.maximize",
+      key: "ArrowUp",
+      metaOnly: true,
+      handler: toggleFocusedMaximize,
+      description: "Maximize / restore focused window",
+    });
+    registerShortcut({
+      id: "window.snap.minimize",
+      key: "ArrowDown",
+      metaOnly: true,
+      handler: minimizeFocusedWindow,
+      description: "Step down focused window (snap → normal → minimize)",
+    });
+
+    // Win+1..4: snap focused window to a quadrant.
+    const quadrant: Record<string, SnapZone> = {
+      "1": "top-left",
+      "2": "top-right",
+      "3": "bottom-left",
+      "4": "bottom-right",
+    };
+    for (const k of Object.keys(quadrant)) {
+      registerShortcut({
+        id: `window.snap.q${k}`,
+        key: k,
+        metaOnly: true,
+        handler: () => snapFocusedWindow(quadrant[k]),
+        description: `Snap window to ${quadrant[k].replace("-", " ")} quadrant`,
       });
     }
 

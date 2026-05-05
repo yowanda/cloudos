@@ -12,7 +12,7 @@
   - [x] Resize (8 handles: corners + edges)
   - [x] Minimize to taskbar
   - [x] Maximize / restore
-  - [x] Snap to edges (left/right half, quadrants)
+  - [x] Snap to edges (left/right half, quadrants) — drag-to-snap **and** keyboard snap presets (`Win+←/→` halves, `Win+1..4` quadrants, `Win+↑` maximize, `Win+↓` step-down). Backed by a new `metaOnly` flag on `ShortcutBinding` that distinguishes Meta-only from Ctrl/Meta-merged matches.
   - [x] Z-index management (focus/blur)
   - [x] Multi-desktop / workspace switching
 - [x] Taskbar (top)

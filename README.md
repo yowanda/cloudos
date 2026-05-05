@@ -9,7 +9,7 @@
 ## Features
 
 ### Core Desktop
-- **Window Manager** — Drag, resize (8 handles), snap to edges/corners, minimize, maximize, z-index management
+- **Window Manager** — Drag, resize (8 handles), snap to edges/corners (drag), minimize, maximize, z-index management. **Keyboard snap presets**: Win+← / Win+→ snap to halves; Win+1..4 snap to top-left/top-right/bottom-left/bottom-right quadrants; Win+↑ maximizes (toggle); Win+↓ "steps down" (un-snap → minimize)
 - **Multi-Desktop Workspaces** — Multiple virtual desktops, taskbar switcher, per-workspace window filtering, drag-to-workspace via window context menu, persisted across reloads
 - **Taskbar** — Running apps, system tray (clock, Wi-Fi, volume, notification bell, workspace switcher), start menu
 - **Dock** — Pinned apps with running indicators, hover animations

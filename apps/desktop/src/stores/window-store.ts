@@ -134,6 +134,56 @@ export function maximizeWindow(id: string) {
   playSound("maximize");
 }
 
+/**
+ * Returns the focused window on the current desktop, or undefined if no
+ * window has focus (e.g. user clicked the desktop background). Snap
+ * shortcuts are no-ops in that case — there's nothing to snap.
+ */
+export function focusedWindow(): WindowConfig | undefined {
+  const did = currentDesktopId();
+  return state.windows.find((w) => w.desktopId === did && w.focused);
+}
+
+/** Convenience for keyboard-driven snapping: snap the focused window. */
+export function snapFocusedWindow(zone: SnapZone) {
+  const w = focusedWindow();
+  if (!w) return;
+  snapWindow(w.id, zone);
+  playSound("maximize");
+}
+
+/** Convenience: maximize/restore the focused window (Win+Up handler). */
+export function toggleFocusedMaximize() {
+  const w = focusedWindow();
+  if (!w) return;
+  maximizeWindow(w.id);
+}
+
+/** Convenience: minimize the focused window (Win+Down handler). */
+export function minimizeFocusedWindow() {
+  const w = focusedWindow();
+  if (!w) return;
+  // If the window is snapped or maximized, fall back to "normal" first
+  // so a follow-up Win+Up doesn't return it to the snapped state. This
+  // mirrors the typical desktop OS Win+Down "step down" behaviour.
+  if (w.state === "maximized" || w.state === "snapped") {
+    setState(
+      produce((s) => {
+        const found = s.windows.find((x) => x.id === w.id);
+        if (!found) return;
+        if (found.prevBounds) {
+          found.bounds = { ...found.prevBounds };
+          found.prevBounds = null;
+        }
+        found.state = "normal";
+        found.snapZone = null;
+      }),
+    );
+  } else {
+    minimizeWindow(w.id);
+  }
+}
+
 export function snapWindow(id: string, zone: SnapZone) {
   const vw = window.innerWidth;
   const vh = window.innerHeight - 88;

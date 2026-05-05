@@ -6,6 +6,16 @@ export interface ShortcutBinding {
   alt?: boolean;
   shift?: boolean;
   meta?: boolean;
+  /**
+   * When true, this binding requires the platform's "super/win" key
+   * (Meta) and explicitly forbids Ctrl. The default `ctrl: true` flag
+   * treats Ctrl and Meta as equivalent — that's fine for things like
+   * Ctrl+S / Cmd+S, but window-snap shortcuts need to specifically
+   * mean "Win+Arrow" without grabbing Ctrl+Arrow (which the user
+   * relies on for word-by-word cursor movement in text fields). Set
+   * `metaOnly` to opt into the strict matcher.
+   */
+  metaOnly?: boolean;
 }
 
 export interface Shortcut extends ShortcutBinding {
@@ -62,12 +72,12 @@ export function registerShortcut(shortcut: Shortcut) {
 
 function effectiveBinding(s: Shortcut): ShortcutBinding {
   if (s.locked) {
-    return { key: s.key, ctrl: s.ctrl, alt: s.alt, shift: s.shift, meta: s.meta };
+    return { key: s.key, ctrl: s.ctrl, alt: s.alt, shift: s.shift, meta: s.meta, metaOnly: s.metaOnly };
   }
   const overrides = loadOverrides();
   const o = overrides[shortcutId(s)];
   if (o && o.key) return o;
-  return { key: s.key, ctrl: s.ctrl, alt: s.alt, shift: s.shift, meta: s.meta };
+  return { key: s.key, ctrl: s.ctrl, alt: s.alt, shift: s.shift, meta: s.meta, metaOnly: s.metaOnly };
 }
 
 export function initShortcuts() {
@@ -75,7 +85,11 @@ export function initShortcuts() {
     for (const s of shortcuts) {
       const b = effectiveBinding(s);
       const keyMatch = e.key.toLowerCase() === b.key.toLowerCase();
-      const ctrlMatch = !!b.ctrl === (e.ctrlKey || e.metaKey);
+      // metaOnly bindings demand Meta and forbid Ctrl; the older `ctrl`
+      // flag continues to treat Ctrl and Meta as the same logical key.
+      const ctrlMatch = b.metaOnly
+        ? e.metaKey && !e.ctrlKey
+        : !!b.ctrl === (e.ctrlKey || e.metaKey);
       const altMatch = !!b.alt === e.altKey;
       const shiftMatch = !!b.shift === e.shiftKey;
 
@@ -195,7 +209,8 @@ export function formatBinding(b: ShortcutBinding): string {
   if (b.ctrl) parts.push("Ctrl");
   if (b.alt) parts.push("Alt");
   if (b.shift) parts.push("Shift");
-  if (b.meta) parts.push("Meta");
+  // metaOnly is rendered the same as `meta` from the user's POV.
+  if (b.meta || b.metaOnly) parts.push("Win");
   parts.push(prettyKey(b.key));
   return parts.join(" + ");
 }
