@@ -173,6 +173,35 @@ Read-only metadata for installable apps:
 Returns published apps (`Published = true`). Filter via `?category=...` and
 `?q=...` query params (server-side).
 
+## Terminal pty (optional)
+
+Off by default. Set `ENABLE_PTY=true` (and optionally `PTY_SHELL`, default
+`/bin/bash`) on the server to expose a real shell over WebSocket.
+
+### `GET /api/v1/pty/health` — public
+
+```json
+{ "enabled": true, "shell": "/bin/bash" }
+```
+
+When `enabled` is `false`, `shell` is omitted/empty.
+
+### `GET /api/v1/pty` — WebSocket upgrade, **JWT required**
+
+JWT can come from either the `Authorization: Bearer …` header or a
+`?token=…` query parameter. The browser WebSocket API can't set arbitrary
+headers, so the query-param form is what the desktop frontend uses.
+
+Frame conventions:
+
+- **Binary frames** are forwarded directly to the pty stdin / from pty
+  stdout. ANSI escape sequences pass through unchanged.
+- **Text frames** matching `{"type":"resize","cols":<u16>,"rows":<u16>}`
+  resize the pty winsize. Anything else is treated as raw stdin and
+  forwarded to the shell.
+
+Closing the WebSocket terminates the spawned shell.
+
 ## Error format
 
 ```json

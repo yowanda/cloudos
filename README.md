@@ -26,7 +26,7 @@
 | App | Description |
 |-----|------------|
 | File Manager | Grid/list view, breadcrumbs, sidebar, create/rename/delete |
-| Terminal | Built-in shell with commands (ls, help, neofetch, echo, etc) |
+| Terminal | Built-in command parser (ls, help, neofetch, echo, etc.) **+ optional real shell** via WebSocket pty backend (xterm.js, color/UTF-8/resize); auto-detected from `/api/v1/pty/health` |
 | Text Editor | Real code editor — multi-tab, syntax highlighting (JS/TS/JSON/Python/CSS/HTML/Markdown), `Ctrl+S` saves to VFS, `Ctrl+N` new tab, `Ctrl+W` close, `Ctrl+F` find/replace, opens automatically when you double-click a text/JSON file in File Manager |
 | Browser | iframe-based web browser with URL bar |
 | Calculator | Fully functional calculator |
@@ -44,6 +44,13 @@
 - **Account page** — Display name, email, avatar emoji, and bio, stored in `cloudos:profile`. Reset clears the entry.
 - **Apps page** — Lists installed manifest apps with icon, version, and category. One-click Launch / Uninstall. Recents history is also browsable + clearable here.
 - **Keyboard page** — Quick read-only summary of every registered shortcut with a "↻ reset" link for any custom binding; "Open Shortcuts app" for the full editor.
+
+### Terminal
+- **Local mode (default)** — built-in command parser with `help`, `ls`, `cat`, `cd`, `echo`, `pwd`, `whoami`, `uname`, `neofetch`, `date`, `uptime`, `history`, `clear`. Multi-tab, color theme.
+- **Remote mode (real shell)** — when the server has `ENABLE_PTY=true`, the Terminal app auto-detects via `/api/v1/pty/health` and exposes a `🔌+` button (and the `remote` command) to open an xterm.js tab connected to the backend pty over WebSocket (`/api/v1/pty?token=…`).
+  - Backend: [`apps/server/internal/handlers/pty.go`](./apps/server/internal/handlers/pty.go) spawns `$PTY_SHELL` (default `/bin/bash`) via `creack/pty`, forwards bytes both ways, and handles xterm `resize` JSON control messages.
+  - Auth: token comes from the `Authorization: Bearer …` header **or** the `?token=` query param (browsers can't set headers on `new WebSocket()`).
+  - Off by default. Set `ENABLE_PTY=true` (and optionally `PTY_SHELL=/bin/sh`) on the server to enable.
 
 ### Text Editor
 Real code editor (replaces the old stub).

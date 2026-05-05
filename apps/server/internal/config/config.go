@@ -3,11 +3,17 @@ package config
 import "os"
 
 type Config struct {
-	Port      string
-	JWTSecret string
-	DB        DBConfig
-	S3        S3Config
+	Port       string
+	JWTSecret  string
+	DB         DBConfig
+	S3         S3Config
 	CORSOrigin string
+	// PTY: WebSocket pty backend for the Terminal app.
+	// Off by default — only enable on trusted, properly authenticated
+	// deployments since it spawns real shells with the server's privileges.
+	EnablePTY bool
+	// Shell to spawn for PTY sessions (e.g. /bin/bash, /bin/sh).
+	PTYShell string
 }
 
 type DBConfig struct {
@@ -49,6 +55,8 @@ func Load() *Config {
 			Region:    getEnv("S3_REGION", "us-east-1"),
 			UseSSL:    getEnv("S3_USE_SSL", "false") == "true",
 		},
+		EnablePTY: getEnv("ENABLE_PTY", "false") == "true",
+		PTYShell:  getEnv("PTY_SHELL", "/bin/bash"),
 	}
 }
 

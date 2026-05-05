@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/websocket/v2"
 	"github.com/yowanda/cloudos/server/internal/config"
 	"github.com/yowanda/cloudos/server/internal/database"
 	"github.com/yowanda/cloudos/server/internal/handlers"
@@ -42,6 +43,7 @@ func main() {
 	fileHandler := handlers.NewFileHandler(fileService)
 	vfsHandler := handlers.NewVFSHandler("data/vfs")
 	shareHandler := handlers.NewShareHandler(database.DB)
+	ptyHandler := handlers.NewPTYHandler(authService, cfg.PTYShell, cfg.EnablePTY)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -130,7 +132,15 @@ func main() {
 	protected.Get("/shares", shareHandler.List)
 	protected.Delete("/shares/:id", shareHandler.Revoke)
 
-	log.Printf("CloudOS Server starting on :%s", cfg.Port)
+	// PTY (browser Terminal). Health is public so the frontend can decide
+	// whether to enable remote-shell mode without first acquiring a token.
+	api.Get("/pty/health", ptyHandler.Health)
+	// WS upgrade path. Auth is checked inside the upgrader (token can come
+	// from either the Authorization header or the ?token query param,
+	// since browsers can't set headers on `new WebSocket()`).
+	api.Get("/pty", ptyHandler.Upgrade, websocket.New(ptyHandler.WS))
+
+	log.Printf("CloudOS Server starting on :%s (pty enabled=%v)", cfg.Port, cfg.EnablePTY)
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}

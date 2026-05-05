@@ -60,9 +60,10 @@
   - [x] File preview panel (quick look) — toolbar 👁️ toggle, right pane shows file icon + metadata + inline content (text, JSON, SVG; placeholder for image/video/audio)
   - [x] Drag & drop within app — drag any entry onto another folder (in the listing or sidebar) to move; visual ring highlights the drop target, source dims to 50%
 - [x] Terminal
-  - [x] Shell emulation with built-in commands
-  - [ ] xterm.js integration (needs backend)
-  - [ ] WebSocket ↔ PTY bridge (backend)
+  - [x] Shell emulation with built-in commands (local mode)
+  - [x] Real shell binding — xterm.js + WebSocket pty backend (`/api/v1/pty`, `creack/pty` shell, gated by `ENABLE_PTY=true`); auto-detected from `/api/v1/pty/health`. Tab UI shows local 💻 and remote 🔌 mode, with a connection status indicator.
+  - [x] xterm.js integration (`@xterm/xterm` + `@xterm/addon-fit`, mounted per remote tab)
+  - [x] WebSocket ↔ PTY bridge (backend) — JSON `{type:"resize",cols,rows}` control + binary stream both directions, JWT auth via header or `?token=`
   - [x] Multi-tab support
   - [x] Terminal color themes
   - [x] cd, history, uptime commands

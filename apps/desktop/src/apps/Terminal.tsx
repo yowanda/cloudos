@@ -1,33 +1,92 @@
-import { Component, createSignal, onMount, For, Show } from "solid-js";
+import { Component, createSignal, onMount, onCleanup, For, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
+import { Terminal as XTerm } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { token } from "../stores/auth-store";
 
 interface HistoryEntry {
   input: string;
   output: string;
 }
 
+type TabMode = "local" | "remote";
+
 interface Tab {
   id: number;
   title: string;
+  mode: TabMode;
+  /** Local-mode shell history. Unused for remote tabs. */
   history: HistoryEntry[];
   cwd: string;
+  /** Remote-mode connection status (purely cosmetic). */
+  remoteStatus?: "connecting" | "open" | "closed" | "error";
 }
 
 let tabId = 0;
 
-function createTab(): Tab {
+function createTab(mode: TabMode = "local"): Tab {
+  tabId++;
   return {
-    id: ++tabId,
-    title: `Terminal ${tabId}`,
-    history: [{ input: "", output: "CloudOS Terminal v0.1.0\nType 'help' for available commands.\n" }],
+    id: tabId,
+    title: mode === "remote" ? `Shell ${tabId}` : `Terminal ${tabId}`,
+    mode,
+    history:
+      mode === "remote"
+        ? []
+        : [
+            {
+              input: "",
+              output:
+                "CloudOS Terminal v0.1.0\nType 'help' for available commands.\n",
+            },
+          ],
     cwd: "~",
   };
 }
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "/api/v1";
+
+interface PTYHealth {
+  enabled: boolean;
+  shell?: string;
+}
+
+async function fetchPTYHealth(): Promise<PTYHealth> {
+  try {
+    const res = await fetch(`${API_BASE}/pty/health`);
+    if (!res.ok) return { enabled: false };
+    return (await res.json()) as PTYHealth;
+  } catch {
+    return { enabled: false };
+  }
+}
+
+/**
+ * Build the WebSocket URL for the PTY endpoint. Picks ws:// or wss://
+ * based on the page protocol, and falls back to a same-origin URL when
+ * VITE_API_URL is unset (the common case in dev).
+ */
+function ptyWsURL(): string {
+  const tok = token();
+  const tokenParam = tok ? `?token=${encodeURIComponent(tok)}` : "";
+  const apiBase = import.meta.env.VITE_API_URL;
+  if (apiBase && /^https?:\/\//.test(apiBase)) {
+    const u = new URL(apiBase);
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+    const path = u.pathname.replace(/\/$/, "") + "/pty";
+    return `${u.protocol}//${u.host}${path}${tokenParam}`;
+  }
+  // Same-origin fallback. `${API_BASE}` resolves to "/api/v1" in dev.
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}${API_BASE}/pty${tokenParam}`;
+}
+
 const Terminal: Component<{ windowId: string }> = () => {
-  const [tabs, setTabs] = createStore<Tab[]>([createTab()]);
+  const [tabs, setTabs] = createStore<Tab[]>([createTab("local")]);
   const [activeTabId, setActiveTabId] = createSignal(tabs[0].id);
   const [input, setInput] = createSignal("");
+  const [ptyAvailable, setPtyAvailable] = createSignal(false);
   let inputRef!: HTMLInputElement;
   let scrollRef!: HTMLDivElement;
 
@@ -35,8 +94,28 @@ const Terminal: Component<{ windowId: string }> = () => {
 
   const activeTab = () => tabs.find((t) => t.id === activeTabId())!;
 
-  onMount(() => inputRef?.focus());
+  // Per-tab xterm instance + WS, kept outside the SolidJS store so we
+  // don't try to make them reactive (they're imperative DOM).
+  const xtermByTab = new Map<number, { term: XTerm; fit: FitAddon; ws: WebSocket | null }>();
 
+  onMount(async () => {
+    inputRef?.focus();
+    const health = await fetchPTYHealth();
+    setPtyAvailable(health.enabled);
+  });
+
+  onCleanup(() => {
+    for (const [, h] of xtermByTab) {
+      try {
+        h.ws?.close();
+      } catch {
+        /* ignore */
+      }
+      h.term.dispose();
+    }
+  });
+
+  // ─── local-mode command parser (kept verbatim from previous impl) ───
   const executeCommand = (cmd: string) => {
     const parts = cmd.trim().split(/\s+/);
     const command = parts[0]?.toLowerCase() ?? "";
@@ -44,17 +123,14 @@ const Terminal: Component<{ windowId: string }> = () => {
 
     switch (command) {
       case "help":
-        output = "Available commands:\n  help      - Show this help\n  echo      - Print text\n  clear     - Clear terminal\n  date      - Show current date\n  whoami    - Show username\n  pwd       - Print working directory\n  uname     - System information\n  neofetch  - System info (fancy)\n  ls        - List files (demo)\n  cat       - Read file (demo)\n  cd        - Change directory (demo)\n  history   - Show command history\n  uptime    - Show uptime";
+        output =
+          "Available commands:\n  help      - Show this help\n  echo      - Print text\n  clear     - Clear terminal\n  date      - Show current date\n  whoami    - Show username\n  pwd       - Print working directory\n  uname     - System information\n  neofetch  - System info (fancy)\n  ls        - List files (demo)\n  cat       - Read file (demo)\n  cd        - Change directory (demo)\n  history   - Show command history\n  uptime    - Show uptime\n  remote    - Open a real shell tab via the WS pty backend";
         break;
       case "echo":
         output = parts.slice(1).join(" ");
         break;
       case "clear":
-        setTabs(
-          (t) => t.id === activeTabId(),
-          "history",
-          [],
-        );
+        setTabs((t) => t.id === activeTabId(), "history", []);
         setInput("");
         return;
       case "date":
@@ -67,9 +143,7 @@ const Terminal: Component<{ windowId: string }> = () => {
         output = activeTab().cwd === "~" ? "/home/user" : activeTab().cwd;
         break;
       case "uname":
-        output = parts[1] === "-a"
-          ? "CloudOS 0.1.0 Browser x86_64 CloudOS"
-          : "CloudOS";
+        output = parts[1] === "-a" ? "CloudOS 0.1.0 Browser x86_64 CloudOS" : "CloudOS";
         break;
       case "neofetch":
         output = `       ╭──────────╮
@@ -81,7 +155,10 @@ const Terminal: Component<{ windowId: string }> = () => {
                         Shell: cloudsh 0.1
                         Terminal: WebTerminal
                         CPU: Your Browser
-                        Memory: ${Math.round(performance.memory?.usedJSHeapSize / 1024 / 1024 || 0)}MB`;
+                        Memory: ${Math.round(
+                          (performance as { memory?: { usedJSHeapSize: number } }).memory
+                            ?.usedJSHeapSize / 1024 / 1024 || 0,
+                        )}MB`;
         break;
       case "ls":
         output = "Documents  Downloads  Pictures  Music  Videos  Desktop";
@@ -104,16 +181,26 @@ const Terminal: Component<{ windowId: string }> = () => {
         }
         break;
       case "history":
-        output = activeTab().history
-          .filter((h) => h.input)
-          .map((h, i) => `  ${i + 1}  ${h.input}`)
-          .join("\n") || "(empty)";
+        output =
+          activeTab()
+            .history.filter((h) => h.input)
+            .map((h, i) => `  ${i + 1}  ${h.input}`)
+            .join("\n") || "(empty)";
         break;
-      case "uptime":
+      case "uptime": {
         const secs = Math.floor(performance.now() / 1000);
         const mins = Math.floor(secs / 60);
         const hrs = Math.floor(mins / 60);
         output = `up ${hrs}h ${mins % 60}m ${secs % 60}s`;
+        break;
+      }
+      case "remote":
+        if (!ptyAvailable()) {
+          output = "Remote shell not available (server has ENABLE_PTY=false).";
+        } else {
+          addRemoteTab();
+          output = "";
+        }
         break;
       case "":
         break;
@@ -139,43 +226,148 @@ const Terminal: Component<{ windowId: string }> = () => {
     }
   };
 
+  // ─── tab management ──────────────────────────────────────────────────
   const addTab = () => {
-    const tab = createTab();
+    const tab = createTab("local");
     setTabs(produce((t: Tab[]) => t.push(tab)));
     setActiveTabId(tab.id);
   };
-
+  const addRemoteTab = () => {
+    if (!ptyAvailable()) return;
+    const tab = createTab("remote");
+    setTabs(produce((t: Tab[]) => t.push(tab)));
+    setActiveTabId(tab.id);
+  };
   const closeTab = (id: number) => {
     if (tabs.length <= 1) return;
     const idx = tabs.findIndex((t) => t.id === id);
+    const handle = xtermByTab.get(id);
+    if (handle) {
+      try {
+        handle.ws?.close();
+      } catch {
+        /* ignore */
+      }
+      handle.term.dispose();
+      xtermByTab.delete(id);
+    }
     setTabs(produce((t: Tab[]) => t.splice(idx, 1)));
     if (activeTabId() === id) {
       setActiveTabId(tabs[Math.max(0, idx - 1)]?.id ?? tabs[0].id);
     }
   };
 
+  // ─── remote tab attach: mount xterm + open WS ────────────────────────
+  const attachXTerm = (host: HTMLDivElement, tab: Tab) => {
+    if (xtermByTab.has(tab.id)) {
+      // Already attached. Re-fit in case the window was resized while inactive.
+      const h = xtermByTab.get(tab.id)!;
+      try { h.fit.fit(); } catch { /* ignore */ }
+      return;
+    }
+    const term = new XTerm({
+      fontFamily: "ui-monospace, Menlo, Monaco, Consolas, monospace",
+      fontSize: 13,
+      cursorBlink: true,
+      theme: {
+        background: "#0d1117",
+        foreground: "#c9d1d9",
+        cursor: "#58a6ff",
+      },
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(host);
+    try { fit.fit(); } catch { /* ignore */ }
+
+    setTabs((t) => t.id === tab.id, "remoteStatus", "connecting");
+    const ws = new WebSocket(ptyWsURL());
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      setTabs((t) => t.id === tab.id, "remoteStatus", "open");
+      // Send initial size so the shell knows our viewport.
+      ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+    };
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === "string") {
+        term.write(ev.data);
+      } else {
+        term.write(new Uint8Array(ev.data as ArrayBuffer));
+      }
+    };
+    ws.onerror = () => {
+      setTabs((t) => t.id === tab.id, "remoteStatus", "error");
+      term.write("\r\n\x1b[31mconnection error\x1b[0m\r\n");
+    };
+    ws.onclose = () => {
+      setTabs((t) => t.id === tab.id, "remoteStatus", "closed");
+      term.write("\r\n\x1b[33mconnection closed\x1b[0m\r\n");
+    };
+
+    term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(new TextEncoder().encode(data));
+      }
+    });
+    term.onResize(({ cols, rows }) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "resize", cols, rows }));
+      }
+    });
+
+    // Re-fit when host element changes size (debounced via rAF).
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        try { fit.fit(); } catch { /* ignore */ }
+      });
+    });
+    ro.observe(host);
+
+    xtermByTab.set(tab.id, { term, fit, ws });
+  };
+
   return (
     <div
       class="h-full flex flex-col bg-[#0d1117] font-mono text-[13px] text-[#c9d1d9] overflow-hidden"
-      onClick={() => inputRef?.focus()}
+      onClick={() => {
+        if (activeTab().mode === "local") inputRef?.focus();
+      }}
     >
       {/* Tab Bar */}
       <div class="flex items-center bg-[#161b22] border-b border-[#30363d] text-xs min-h-[28px]">
         <For each={tabs}>
           {(tab) => (
             <div
-              class="flex items-center gap-1 px-3 py-1.5 cursor-pointer border-r border-[#30363d] max-w-[150px] transition-colors"
+              class="flex items-center gap-1 px-3 py-1.5 cursor-pointer border-r border-[#30363d] max-w-[170px] transition-colors"
               classList={{
                 "bg-[#0d1117] text-[#c9d1d9]": activeTabId() === tab.id,
                 "text-[#8b949e] hover:bg-[#1c2128]": activeTabId() !== tab.id,
               }}
               onClick={() => setActiveTabId(tab.id)}
             >
+              <span title={tab.mode === "remote" ? "Remote shell (WS pty)" : "Local terminal"}>
+                {tab.mode === "remote" ? "🔌" : "💻"}
+              </span>
               <span class="truncate">{tab.title}</span>
+              <Show when={tab.mode === "remote"}>
+                <span
+                  class="w-1.5 h-1.5 rounded-full"
+                  classList={{
+                    "bg-emerald-400": tab.remoteStatus === "open",
+                    "bg-amber-400": tab.remoteStatus === "connecting",
+                    "bg-red-400": tab.remoteStatus === "error" || tab.remoteStatus === "closed",
+                  }}
+                />
+              </Show>
               <Show when={tabs.length > 1}>
                 <button
+                  type="button"
                   class="ml-1 text-[10px] text-[#8b949e] hover:text-white rounded hover:bg-white/10 w-4 h-4 flex items-center justify-center"
-                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
                 >
                   ×
                 </button>
@@ -184,55 +376,82 @@ const Terminal: Component<{ windowId: string }> = () => {
           )}
         </For>
         <button
+          type="button"
           class="px-2 py-1 text-[#8b949e] hover:text-white hover:bg-[#1c2128] transition-colors"
           onClick={addTab}
-          title="New tab"
+          title="New local tab"
         >
           +
         </button>
+        <Show when={ptyAvailable()}>
+          <button
+            type="button"
+            class="px-2 py-1 text-[#8b949e] hover:text-emerald-300 hover:bg-[#1c2128] transition-colors"
+            onClick={addRemoteTab}
+            title="Open remote shell (WS pty)"
+          >
+            🔌+
+          </button>
+        </Show>
       </div>
 
       {/* Terminal Content */}
-      <div ref={scrollRef} class="flex-1 overflow-y-auto p-3 space-y-1">
-        <For each={activeTab().history}>
-          {(entry) => (
-            <div>
-              {entry.input && (
-                <div class="flex gap-1">
-                  <span class="text-[#58a6ff]">{username}</span>
-                  <span class="text-[#8b949e]">:</span>
-                  <span class="text-[#7ee787]">{activeTab().cwd}</span>
-                  <span class="text-[#8b949e]">$</span>
-                  <span class="ml-1">{entry.input}</span>
-                </div>
-              )}
-              {entry.output && (
-                <pre class="whitespace-pre-wrap text-[#8b949e] mt-0.5">{entry.output}</pre>
-              )}
-            </div>
-          )}
-        </For>
+      <Show
+        when={activeTab().mode === "local"}
+        fallback={<RemoteTabBody tab={activeTab()} attach={attachXTerm} />}
+      >
+        <div ref={scrollRef} class="flex-1 overflow-y-auto p-3 space-y-1">
+          <For each={activeTab().history}>
+            {(entry) => (
+              <div>
+                {entry.input && (
+                  <div class="flex gap-1">
+                    <span class="text-[#58a6ff]">{username}</span>
+                    <span class="text-[#8b949e]">:</span>
+                    <span class="text-[#7ee787]">{activeTab().cwd}</span>
+                    <span class="text-[#8b949e]">$</span>
+                    <span class="ml-1">{entry.input}</span>
+                  </div>
+                )}
+                {entry.output && (
+                  <pre class="whitespace-pre-wrap text-[#8b949e] mt-0.5">{entry.output}</pre>
+                )}
+              </div>
+            )}
+          </For>
 
-        {/* Active prompt */}
-        <div class="flex gap-1 items-center">
-          <span class="text-[#58a6ff]">{username}</span>
-          <span class="text-[#8b949e]">:</span>
-          <span class="text-[#7ee787]">{activeTab().cwd}</span>
-          <span class="text-[#8b949e]">$</span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={input()}
-            onInput={(e) => setInput(e.currentTarget.value)}
-            onKeyDown={handleKeyDown}
-            class="flex-1 ml-1 bg-transparent text-[#c9d1d9] focus:outline-none caret-[#58a6ff]"
-            spellcheck={false}
-            autocomplete="off"
-          />
+          {/* Active prompt */}
+          <div class="flex gap-1 items-center">
+            <span class="text-[#58a6ff]">{username}</span>
+            <span class="text-[#8b949e]">:</span>
+            <span class="text-[#7ee787]">{activeTab().cwd}</span>
+            <span class="text-[#8b949e]">$</span>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input()}
+              onInput={(e) => setInput(e.currentTarget.value)}
+              onKeyDown={handleKeyDown}
+              class="flex-1 ml-1 bg-transparent text-[#c9d1d9] focus:outline-none caret-[#58a6ff]"
+              spellcheck={false}
+              autocomplete="off"
+            />
+          </div>
         </div>
-      </div>
+      </Show>
     </div>
   );
+};
+
+/**
+ * Remote (xterm.js) tab body. Mount a host div and let the parent attach
+ * an xterm Terminal + WS to it. We intentionally don't render anything
+ * SolidJS-reactive inside the host — xterm owns its DOM.
+ */
+const RemoteTabBody: Component<{ tab: Tab; attach: (host: HTMLDivElement, tab: Tab) => void }> = (props) => {
+  let host!: HTMLDivElement;
+  onMount(() => props.attach(host, props.tab));
+  return <div ref={host} class="flex-1 min-h-0 p-2 bg-[#0d1117]" />;
 };
 
 export default Terminal;
