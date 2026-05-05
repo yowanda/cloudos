@@ -29,6 +29,7 @@ const App: Component = () => {
     attachAudioUnlock();
     // Alt+Tab: Window switcher
     registerShortcut({
+      id: "system.switch-windows",
       key: "Tab",
       alt: true,
       handler: () => {
@@ -45,13 +46,16 @@ const App: Component = () => {
 
     // Super / Meta: Toggle start menu
     registerShortcut({
+      id: "system.toggle-start-menu",
       key: "Meta",
+      locked: true,
       handler: toggleStartMenu,
       description: "Toggle Start Menu",
     });
 
     // Ctrl+D: Show desktop (minimize all on current workspace)
     registerShortcut({
+      id: "system.show-desktop",
       key: "d",
       ctrl: true,
       handler: () => {
@@ -64,6 +68,7 @@ const App: Component = () => {
 
     // Ctrl+L: Lock screen
     registerShortcut({
+      id: "system.lock-screen",
       key: "l",
       ctrl: true,
       handler: lockScreen,
@@ -72,6 +77,7 @@ const App: Component = () => {
 
     // Ctrl+Alt+Right / Left: cycle workspaces
     registerShortcut({
+      id: "workspace.next",
       key: "ArrowRight",
       ctrl: true,
       alt: true,
@@ -79,6 +85,7 @@ const App: Component = () => {
       description: "Next workspace",
     });
     registerShortcut({
+      id: "workspace.prev",
       key: "ArrowLeft",
       ctrl: true,
       alt: true,
@@ -89,9 +96,11 @@ const App: Component = () => {
     // Ctrl+Alt+1..9: jump to workspace N
     for (let i = 1; i <= 9; i++) {
       registerShortcut({
+        id: `workspace.switch.${i}`,
         key: String(i),
         ctrl: true,
         alt: true,
+        locked: true,
         handler: () => {
           const list = desktops();
           const target = list[i - 1];

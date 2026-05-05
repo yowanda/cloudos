@@ -9,6 +9,7 @@ import Browser from "./Browser";
 import Notes from "./Notes";
 import AppStore from "./AppStore";
 import MediaPlayer from "./MediaPlayer";
+import Shortcuts from "./Shortcuts";
 
 export function registerAllApps() {
   registerAppComponent("com.cloudos.files", FileManager);
@@ -21,4 +22,5 @@ export function registerAllApps() {
   registerAppComponent("com.cloudos.notes", Notes);
   registerAppComponent("com.cloudos.appstore", AppStore);
   registerAppComponent("com.cloudos.mediaplayer", MediaPlayer);
+  registerAppComponent("com.cloudos.shortcuts", Shortcuts);
 }

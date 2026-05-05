@@ -177,7 +177,7 @@
   - [ ] Playlist support
 - [ ] Advanced features
   - [x] Multi-desktop workspace UI (taskbar switcher, Ctrl+Alt+Arrow / Ctrl+Alt+1..9 shortcuts, per-workspace window filtering, persisted)
-  - [ ] Custom keyboard shortcut editor
+  - [x] Custom keyboard shortcut editor (Shortcuts app: record key combos, conflict detection, per-shortcut + global reset, persisted in localStorage)
   - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
   - [ ] Drag & drop between windows
   - [x] System sounds (WebAudio synth: open/close/min/max, notify success/warning/error, lock/unlock; Settings toggle + volume + preview)
