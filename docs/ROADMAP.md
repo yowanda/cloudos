@@ -69,7 +69,7 @@
   - [x] Multi-tab support
   - [x] Terminal color themes
   - [x] cd, history, uptime commands
-  - [ ] Copy/paste support
+  - [x] Copy/paste support — `Ctrl+Shift+C` copies the current selection (or prompt input) to the system clipboard, `Ctrl+Shift+V` pastes the clipboard at the cursor. Works in both local mode (window selection / prompt) and remote xterm.js mode (`term.getSelection()` ↔ `term.paste()`). Plain `Ctrl+C` is left alone so it still sends `SIGINT` in the remote shell. New `copy <text>` / `paste` built-ins for keyboard-free use.
 - [x] Text Editor
   - [x] Code editor with line numbers
   - [x] Multi-file tabs UI (open, switch, close, scratch tabs)

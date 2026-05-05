@@ -65,11 +65,12 @@ Manifest apps go through a two-stage permission gate, modelled on the browser's 
 The runtime gate lives in [`src/core/permissions.ts`](./apps/desktop/src/core/permissions.ts); the prompt component is [`src/shell/PermissionPrompt.tsx`](./apps/desktop/src/shell/PermissionPrompt.tsx).
 
 ### Terminal
-- **Local mode (default)** — built-in command parser with `help`, `ls`, `cat`, `cd`, `echo`, `pwd`, `whoami`, `uname`, `neofetch`, `date`, `uptime`, `history`, `clear`. Multi-tab, color theme.
+- **Local mode (default)** — built-in command parser with `help`, `ls`, `cat`, `cd`, `echo`, `pwd`, `whoami`, `uname`, `neofetch`, `date`, `uptime`, `history`, `clear`, `copy`, `paste`. Multi-tab, color theme.
 - **Remote mode (real shell)** — when the server has `ENABLE_PTY=true`, the Terminal app auto-detects via `/api/v1/pty/health` and exposes a `🔌+` button (and the `remote` command) to open an xterm.js tab connected to the backend pty over WebSocket (`/api/v1/pty?token=…`).
   - Backend: [`apps/server/internal/handlers/pty.go`](./apps/server/internal/handlers/pty.go) spawns `$PTY_SHELL` (default `/bin/bash`) via `creack/pty`, forwards bytes both ways, and handles xterm `resize` JSON control messages.
   - Auth: token comes from the `Authorization: Bearer …` header **or** the `?token=` query param (browsers can't set headers on `new WebSocket()`).
   - Off by default. Set `ENABLE_PTY=true` (and optionally `PTY_SHELL=/bin/sh`) on the server to enable.
+- **Copy / paste** — `Ctrl+Shift+C` copies the current selection (window selection in local mode, `term.getSelection()` in remote xterm mode; falls back to the prompt input when nothing is selected). `Ctrl+Shift+V` pastes the system clipboard at the cursor (`term.paste()` in remote mode, splice-at-cursor in the prompt for local mode). Plain `Ctrl+C` is left alone so it still sends `SIGINT` to the remote shell. As built-in OS app the Terminal goes around the manifest permission gate and uses `navigator.clipboard` directly; on insecure origins it falls back to a hidden `<textarea>` + `document.execCommand('copy')`.
 
 ### Text Editor
 Real code editor (replaces the old stub).

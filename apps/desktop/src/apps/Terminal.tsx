@@ -124,7 +124,7 @@ const Terminal: Component<{ windowId: string }> = () => {
     switch (command) {
       case "help":
         output =
-          "Available commands:\n  help      - Show this help\n  echo      - Print text\n  clear     - Clear terminal\n  date      - Show current date\n  whoami    - Show username\n  pwd       - Print working directory\n  uname     - System information\n  neofetch  - System info (fancy)\n  ls        - List files (demo)\n  cat       - Read file (demo)\n  cd        - Change directory (demo)\n  history   - Show command history\n  uptime    - Show uptime\n  remote    - Open a real shell tab via the WS pty backend";
+          "Available commands:\n  help      - Show this help\n  echo      - Print text\n  clear     - Clear terminal\n  date      - Show current date\n  whoami    - Show username\n  pwd       - Print working directory\n  uname     - System information\n  neofetch  - System info (fancy)\n  ls        - List files (demo)\n  cat       - Read file (demo)\n  cd        - Change directory (demo)\n  history   - Show command history\n  uptime    - Show uptime\n  copy      - Copy <text> to the system clipboard\n  paste     - Print the system clipboard contents\n  remote    - Open a real shell tab via the WS pty backend\n\nKeyboard:\n  Ctrl+Shift+C  Copy selection (or current prompt) to clipboard\n  Ctrl+Shift+V  Paste clipboard at the prompt cursor";
         break;
       case "echo":
         output = parts.slice(1).join(" ");
@@ -187,6 +187,26 @@ const Terminal: Component<{ windowId: string }> = () => {
             .map((h, i) => `  ${i + 1}  ${h.input}`)
             .join("\n") || "(empty)";
         break;
+      case "copy":
+        if (!parts[1]) {
+          output = "copy: missing argument (try `copy <text>`)";
+          break;
+        }
+        copyToClipboard(parts.slice(1).join(" "))
+          .then((ok) => {
+            setTabs(
+              (t) => t.id === activeTabId(),
+              "history",
+              produce((h: HistoryEntry[]) => {
+                h.push({
+                  input: "",
+                  output: ok ? "copied to clipboard" : "copy: clipboard unavailable",
+                });
+              }),
+            );
+          });
+        output = "";
+        break;
       case "uptime": {
         const secs = Math.floor(performance.now() / 1000);
         const mins = Math.floor(secs / 60);
@@ -201,6 +221,21 @@ const Terminal: Component<{ windowId: string }> = () => {
           addRemoteTab();
           output = "";
         }
+        break;
+      case "paste":
+        readFromClipboard().then((t) => {
+          setTabs(
+            (t2) => t2.id === activeTabId(),
+            "history",
+            produce((h: HistoryEntry[]) => {
+              h.push({
+                input: "",
+                output: t || "paste: clipboard empty or unavailable",
+              });
+            }),
+          );
+        });
+        output = "";
         break;
       case "":
         break;
@@ -218,6 +253,101 @@ const Terminal: Component<{ windowId: string }> = () => {
     requestAnimationFrame(() => {
       scrollRef?.scrollTo(0, scrollRef.scrollHeight);
     });
+  };
+
+  /**
+   * Read whatever the user has selected on the page (active terminal
+   * history pane, prompt input, etc) and write it to the system
+   * clipboard. Returns true on success.
+   *
+   * Built-in apps don't go through the manifest permission gate, so we
+   * call `navigator.clipboard` directly. Falls back to a hidden
+   * textarea + `document.execCommand('copy')` for non-secure contexts
+   * where `navigator.clipboard` isn't available.
+   */
+  async function copyToClipboard(text: string): Promise<boolean> {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // fall through
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function readFromClipboard(): Promise<string> {
+    try {
+      if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
+    } catch {
+      // ignore — most often a permission-denied or non-secure-context error
+    }
+    return "";
+  }
+
+  /**
+   * Splice `text` into the prompt input at the current cursor position,
+   * stripping CR/LF (the Enter handler is responsible for executing).
+   * Used by the local-mode paste shortcut.
+   */
+  function pasteIntoInput(text: string) {
+    const sanitized = text.replace(/\r\n?/g, "\n").replace(/\n+/g, " ");
+    const el = inputRef;
+    if (!el) {
+      setInput(input() + sanitized);
+      return;
+    }
+    const start = el.selectionStart ?? input().length;
+    const end = el.selectionEnd ?? input().length;
+    const cur = input();
+    const next = cur.slice(0, start) + sanitized + cur.slice(end);
+    setInput(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + sanitized.length;
+      try { el.setSelectionRange(pos, pos); } catch { /* ignore */ }
+    });
+  }
+
+  /**
+   * Local-mode copy/paste shortcut handler. Bound on the outer
+   * Terminal container (so it works whether the input or the history
+   * pane has focus) and only fires on Ctrl+Shift+C / Ctrl+Shift+V so
+   * it never interferes with native Ctrl+C copy of selected text or
+   * the input's own Ctrl+V paste.
+   */
+  const handleLocalCopyPaste = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "c") {
+      const sel = window.getSelection?.()?.toString() ?? "";
+      const text = sel || input();
+      if (text) {
+        e.preventDefault();
+        void copyToClipboard(text);
+      }
+      return;
+    }
+    if (k === "v") {
+      e.preventDefault();
+      void readFromClipboard().then((t) => {
+        if (t) pasteIntoInput(t);
+      });
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -280,6 +410,29 @@ const Terminal: Component<{ windowId: string }> = () => {
     term.open(host);
     try { fit.fit(); } catch { /* ignore */ }
 
+    // Ctrl+Shift+C / Ctrl+Shift+V — clipboard handling for the remote
+    // pty tab. Returning false from the handler prevents xterm from
+    // forwarding the key to the pty (so the shell doesn't see a stray
+    // Ctrl-C / Ctrl-V). Plain Ctrl+C is left untouched and continues to
+    // be sent through as SIGINT.
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== "keydown") return true;
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return true;
+      const k = e.key.toLowerCase();
+      if (k === "c") {
+        const sel = term.getSelection();
+        if (sel) void copyToClipboard(sel);
+        return false;
+      }
+      if (k === "v") {
+        void readFromClipboard().then((t) => {
+          if (t) term.paste(t);
+        });
+        return false;
+      }
+      return true;
+    });
+
     setTabs((t) => t.id === tab.id, "remoteStatus", "connecting");
     const ws = new WebSocket(ptyWsURL());
     ws.binaryType = "arraybuffer";
@@ -330,8 +483,12 @@ const Terminal: Component<{ windowId: string }> = () => {
   return (
     <div
       class="h-full flex flex-col bg-[#0d1117] font-mono text-[13px] text-[#c9d1d9] overflow-hidden"
+      tabIndex={-1}
       onClick={() => {
         if (activeTab().mode === "local") inputRef?.focus();
+      }}
+      onKeyDown={(e) => {
+        if (activeTab().mode === "local") handleLocalCopyPaste(e);
       }}
     >
       {/* Tab Bar */}
