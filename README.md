@@ -95,6 +95,15 @@ Supported sources:
 - **Drag-to-move** — drag a file or folder onto any folder (in the file listing **or** in the left sidebar) to move it. The drop target glows with the accent color, the source row dims while dragging, and a notification confirms the move.
 - **Cross-window drag & drop** — drag a row out of File Manager and drop it onto an open **Text Editor** to open the file as a new tab, or onto an open **Image Viewer** to add it to the carousel. The receiver shows a dashed accent overlay while the drop is staged. Image Viewer rejects non-image MIMEs gracefully. Both apps also accept files dragged from outside the browser (host OS drag-in).
 
+### Progressive Web App / offline
+CloudOS ships a service worker (`apps/desktop/public/sw.js`) and Web App Manifest (`manifest.webmanifest`) so the shell loads even without connectivity:
+- **Install** — Chrome/Edge show the install button in the URL bar; the manifest declares CloudOS as a standalone PWA with `theme_color: #6366f1` and SVG icons.
+- **Offline shell** — the SW precaches `/`, the manifest, and the icon on install; navigations fall back to the cached shell when the network is gone.
+- **Static assets** — JS/CSS/SVG/font requests are stale-while-revalidate, so subsequent loads are instant and the cache refreshes in the background.
+- **APIs are never cached** — `/api/`, `/auth/`, and `/ws/` are network-only, so auth tokens and live data are always fresh.
+- **Versioned cache** — cache name is `cloudos-shell-v1`; bumping the version on a new deploy purges the old cache on `activate`.
+- **Dev-server-safe** — registration is gated to `import.meta.env.PROD` so Vite HMR isn't fighting the SW's caching.
+
 ### Deployment & Ops
 - **CI** (`.github/workflows/ci.yml`) builds the frontend + Go backend on every PR; on `main` it also builds both Docker images.
 - **Release** (`.github/workflows/release.yml`) on `v*.*.*` tags publishes images to `ghcr.io/<owner>/cloudos-{server,desktop}` and creates a GitHub Release with auto-generated changelog.

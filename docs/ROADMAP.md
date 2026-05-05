@@ -137,7 +137,7 @@
 - [x] File sync
   - [x] Browser ↔ cloud snapshot sync (push + pull)
   - [ ] Per-entry diff sync / conflict resolution
-  - [ ] Offline support (Service Worker)
+  - [x] **Offline support (Service Worker)** — `apps/desktop/public/sw.js` precaches the shell on install and uses a tiered fetch strategy: navigation requests are network-first with a cached `/` fallback, static assets (`/assets/`, JS / CSS / SVG / icons / fonts) are stale-while-revalidate, and API calls (`/api/`, `/auth/`, `/ws/`) are network-only so live data and auth tokens are never served from cache. The cache name is versioned (`cloudos-shell-v1`) so a new deploy purges the old cache on `activate`. Backed by `apps/desktop/public/manifest.webmanifest` (installable PWA: name, theme color, scope, icons) and `icon.svg` / `icon-maskable.svg`. Registration is gated to `import.meta.env.PROD` so the dev server's HMR isn't fighting the SW's caching.
 - [x] File sharing
   - [x] DB schema for shares (share token, permission, expiry)
   - [x] Public share links (with expiry, optional password)
