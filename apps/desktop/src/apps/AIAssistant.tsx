@@ -178,6 +178,14 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                     Pluggable LLM chat. Default provider is the offline <strong>Echo</strong> mock —
                     pick a real provider in the ⚙ Settings tab.
                   </p>
+                  <p class="text-[11px] mt-3">
+                    Try a slash command — they work in <em>every</em> mode (no API key needed):
+                  </p>
+                  <div class="text-[10px] mt-1 font-mono leading-relaxed">
+                    <code>/help</code> · <code>/ls /Documents</code> · <code>/read /path/to/file</code>
+                    <br />
+                    <code>/find readme</code> · <code>/storage</code> · <code>/windows</code> · <code>/now</code>
+                  </div>
                 </div>
               }
             >

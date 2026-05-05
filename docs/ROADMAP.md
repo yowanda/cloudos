@@ -201,7 +201,7 @@
 - [x] AI Assistant
   - [x] Chat UI (windowed app, multi-conversation sidebar, persisted)
   - [x] LLM API integration (OpenAI, Anthropic, Ollama, OpenAI-compatible, offline echo)
-  - [ ] Context-aware (can read files, run commands)
+  - [x] Context-aware (can read files, run commands) — rule-based slash-command tool layer in `apps/desktop/src/stores/ai-tools.ts` intercepts user messages before they hit the LLM. Commands: `/help`, `/read <path>`, `/ls [path]`, `/stat <path>`, `/find <pattern>`, `/tree [path] [maxDepth]`, `/storage`, `/clock`, `/apps`, `/windows`, `/desktops`, `/whoami`, `/recent`, `/now`. Works in **every provider mode** (echo / OpenAI / Anthropic / Ollama / OpenAI-compatible) — no API key required, fully offline. Read-only by design (peek at VFS contents, query desktop state, inspect storage / clock); write operations stay behind explicit user actions in the respective apps. Future stage will graduate to LLM tool-calling so models can decide which tool to invoke based on natural-language requests.
   - [x] Prompt templates (configurable system prompt)
 - [x] Media Player
   - [x] Video player (HTML5 <video>, supports mp4/webm/ogg)

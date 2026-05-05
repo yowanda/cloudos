@@ -36,7 +36,7 @@
 | App Store | Browse by category, search, install/uninstall, **ratings & reviews** (1–5 stars, write/edit/delete your own, histogram, persisted) |
 | Media Player | Audio + video playback, library with search/filter, drag/drop file import, shuffle, repeat (off/all/one), real seek/volume/mute |
 | Shortcuts | Browse, remap, and reset all keyboard shortcuts |
-| AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
+| AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config, **context-aware slash commands** (`/read`, `/ls`, `/find`, `/storage`, `/windows`, …) that work in every mode without an API key |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge with **first-use permission prompts** (see "Per-app permissions" below) — full reference in [`docs/APPS.md`](./docs/APPS.md) |
 
 ### Settings & Start menu polish

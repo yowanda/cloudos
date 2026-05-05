@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { tryExecuteSlashCommand } from "./ai-tools";
 
 export type AIRole = "user" | "assistant" | "system";
 
@@ -285,6 +286,23 @@ export async function sendMessage(text: string, opts: SendOptions = {}): Promise
     timestamp: Date.now(),
   };
   appendMessage(conv.id, userMsg);
+
+  // Context-aware slash commands (`/read`, `/ls`, `/find`, …) bypass the
+  // configured LLM provider entirely — they're handled by the local
+  // rule-based tool layer in `ai-tools.ts`. This means the Assistant has
+  // useful read-only powers (peeking at VFS files, listing windows /
+  // apps, checking storage usage) in every mode, including offline echo.
+  // See src/stores/ai-tools.ts for the full command list.
+  const tool = await tryExecuteSlashCommand(text);
+  if (tool.handled) {
+    appendMessage(conv.id, {
+      id: `msg-${Date.now()}-${nextMsg++}`,
+      role: "assistant",
+      content: tool.reply,
+      timestamp: Date.now(),
+    });
+    return;
+  }
 
   const cfg = config();
   const sys = opts.systemPrompt ?? cfg.systemPrompt;
