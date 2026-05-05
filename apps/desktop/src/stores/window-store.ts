@@ -1,6 +1,7 @@
 import { createStore, produce } from "solid-js/store";
 import type { WindowConfig, WindowState, SnapZone, WindowBounds } from "@cloudos/shared";
 import { generateId } from "@cloudos/shared";
+import { currentDesktopId } from "./desktop-store";
 
 interface WindowStore {
   windows: WindowConfig[];
@@ -13,6 +14,11 @@ const [state, setState] = createStore<WindowStore>({
 });
 
 export const windowStore = state;
+
+export function currentDesktopWindows() {
+  const did = currentDesktopId();
+  return state.windows.filter((w) => w.desktopId === did);
+}
 
 export function openWindow(opts: {
   appId: string;
@@ -44,7 +50,7 @@ export function openWindow(opts: {
     },
     prevBounds: null,
     zIndex: state.topZIndex + 1,
-    desktopId: 0,
+    desktopId: currentDesktopId(),
     snapZone: null,
     resizable: opts.resizable ?? true,
     draggable: true,
@@ -183,4 +189,26 @@ export function resizeWindow(id: string, bounds: Partial<WindowBounds>) {
 
 export function getWindowsByDesktop(desktopId: number) {
   return state.windows.filter((w) => w.desktopId === desktopId);
+}
+
+export function moveWindowToDesktop(id: string, desktopId: number) {
+  setState(
+    produce((s) => {
+      const w = s.windows.find((w) => w.id === id);
+      if (!w) return;
+      w.desktopId = desktopId;
+      w.focused = false;
+    })
+  );
+}
+
+export function reassignWindowsFromDesktop(removedDesktopId: number, targetDesktopId: number) {
+  if (removedDesktopId === targetDesktopId) return;
+  setState(
+    produce((s) => {
+      for (const w of s.windows) {
+        if (w.desktopId === removedDesktopId) w.desktopId = targetDesktopId;
+      }
+    })
+  );
 }

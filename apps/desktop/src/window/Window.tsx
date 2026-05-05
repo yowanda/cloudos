@@ -10,9 +10,11 @@ import {
   moveWindow,
   resizeWindow,
   snapWindow,
+  moveWindowToDesktop,
 } from "../stores/window-store";
-import { hideContextMenu } from "../stores/contextmenu-store";
+import { hideContextMenu, showContextMenu, type MenuItem } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
+import { desktops, currentDesktopId, switchDesktop } from "../stores/desktop-store";
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -134,6 +136,46 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
         class="flex items-center h-8 px-3 gap-2 bg-os-window-title border-b border-os-border select-none"
         onMouseDown={handleDragStart}
         onDblClick={() => maximizeWindow(props.config.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          focusWindow(props.config.id);
+          const items: MenuItem[] = [
+            {
+              label: props.config.state === "minimized" ? "Restore" : "Minimize",
+              icon: "—",
+              action: () => minimizeWindow(props.config.id),
+              disabled: !props.config.minimizable,
+            },
+            {
+              label: props.config.state === "maximized" ? "Restore" : "Maximize",
+              icon: props.config.state === "maximized" ? "🗗" : "🗖",
+              action: () => maximizeWindow(props.config.id),
+              disabled: !props.config.maximizable,
+            },
+            { separator: true, label: "" },
+            ...desktops().map<MenuItem>((d) => ({
+              label:
+                d.id === props.config.desktopId
+                  ? `On ${d.name}`
+                  : `Move to ${d.name}`,
+              icon: d.id === props.config.desktopId ? "•" : "→",
+              disabled: d.id === props.config.desktopId,
+              action: () => {
+                moveWindowToDesktop(props.config.id, d.id);
+                if (d.id !== currentDesktopId()) switchDesktop(d.id, { silent: true });
+              },
+            })),
+            { separator: true, label: "" },
+            {
+              label: "Close",
+              icon: "✕",
+              action: () => closeWindow(props.config.id),
+              disabled: !props.config.closable,
+            },
+          ];
+          showContextMenu(e.clientX, e.clientY, items);
+        }}
       >
         <span class="text-sm">{props.config.icon}</span>
         <span class="flex-1 text-xs font-medium text-os-text truncate">{props.config.title}</span>

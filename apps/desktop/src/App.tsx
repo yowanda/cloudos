@@ -9,7 +9,7 @@ import { WindowSwitcher, openSwitcher, closeSwitcher, nextWindow } from "./windo
 import { ThemeProvider } from "./theme/theme-provider";
 import { registerShortcut, initShortcuts } from "./core/shortcut-manager";
 import { toggleStartMenu } from "./stores/startmenu-store";
-import { windowStore, minimizeWindow } from "./stores/window-store";
+import { currentDesktopWindows, minimizeWindow } from "./stores/window-store";
 import { registerAllApps } from "./apps";
 import LockScreen from "./shell/LockScreen";
 import { lockScreen } from "./stores/auth-store";
@@ -17,6 +17,8 @@ import { ToastLayer, NotificationCenter } from "./shell/Notifications";
 import { notify } from "./stores/notification-store";
 import BootScreen from "./shell/BootScreen";
 import { DesktopWidgets } from "./shell/Widgets";
+import { WorkspaceOverlay } from "./shell/WorkspaceSwitcher";
+import { desktops, nextDesktop, prevDesktop, switchDesktop } from "./stores/desktop-store";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
@@ -46,14 +48,14 @@ const App: Component = () => {
       description: "Toggle Start Menu",
     });
 
-    // Ctrl+D: Show desktop (minimize all)
+    // Ctrl+D: Show desktop (minimize all on current workspace)
     registerShortcut({
       key: "d",
       ctrl: true,
       handler: () => {
-        windowStore.windows.forEach((w) => {
+        for (const w of currentDesktopWindows()) {
           if (w.state !== "minimized") minimizeWindow(w.id);
-        });
+        }
       },
       description: "Show desktop",
     });
@@ -65,6 +67,37 @@ const App: Component = () => {
       handler: lockScreen,
       description: "Lock screen",
     });
+
+    // Ctrl+Alt+Right / Left: cycle workspaces
+    registerShortcut({
+      key: "ArrowRight",
+      ctrl: true,
+      alt: true,
+      handler: nextDesktop,
+      description: "Next workspace",
+    });
+    registerShortcut({
+      key: "ArrowLeft",
+      ctrl: true,
+      alt: true,
+      handler: prevDesktop,
+      description: "Previous workspace",
+    });
+
+    // Ctrl+Alt+1..9: jump to workspace N
+    for (let i = 1; i <= 9; i++) {
+      registerShortcut({
+        key: String(i),
+        ctrl: true,
+        alt: true,
+        handler: () => {
+          const list = desktops();
+          const target = list[i - 1];
+          if (target) switchDesktop(target.id);
+        },
+        description: `Switch to workspace ${i}`,
+      });
+    }
 
     initShortcuts();
   });
@@ -97,6 +130,7 @@ const App: Component = () => {
         <ToastLayer />
         <Taskbar />
         <Dock />
+        <WorkspaceOverlay />
         <LockScreen />
       </div>
     </ThemeProvider>

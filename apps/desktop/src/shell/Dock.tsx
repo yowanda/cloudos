@@ -1,5 +1,5 @@
 import { Component, For } from "solid-js";
-import { openWindow, windowStore, focusWindow } from "../stores/window-store";
+import { openWindow, currentDesktopWindows, focusWindow } from "../stores/window-store";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
 
@@ -27,7 +27,7 @@ const Dock: Component = () => {
     hideContextMenu();
     setStartMenuOpen(false);
 
-    const existing = windowStore.windows.find((w) => w.appId === item.id);
+    const existing = currentDesktopWindows().find((w) => w.appId === item.id);
     if (existing) {
       focusWindow(existing.id);
     } else {
@@ -41,7 +41,7 @@ const Dock: Component = () => {
     }
   };
 
-  const isRunning = (appId: string) => windowStore.windows.some((w) => w.appId === appId);
+  const isRunning = (appId: string) => currentDesktopWindows().some((w) => w.appId === appId);
 
   return (
     <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-[9998] flex items-end gap-1 px-3 py-1.5 rounded-2xl bg-os-dock backdrop-blur-xl border border-os-border">

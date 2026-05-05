@@ -10,12 +10,13 @@
 
 ### Core Desktop
 - **Window Manager** — Drag, resize (8 handles), snap to edges/corners, minimize, maximize, z-index management
-- **Taskbar** — Running apps, system tray (clock, Wi-Fi, volume, notification bell), start menu
+- **Multi-Desktop Workspaces** — Multiple virtual desktops, taskbar switcher, per-workspace window filtering, drag-to-workspace via window context menu, persisted across reloads
+- **Taskbar** — Running apps, system tray (clock, Wi-Fi, volume, notification bell, workspace switcher), start menu
 - **Dock** — Pinned apps with running indicators, hover animations
 - **Start Menu** — App grid with search/filter
-- **Context Menu** — Right-click menus (desktop, per-component)
+- **Context Menu** — Right-click menus (desktop, window title bar with workspace move, per-component)
 - **Theme Engine** — Dark/light mode, CSS custom properties, glassmorphism effects
-- **Keyboard Shortcuts** — Alt+Tab (window switcher), Ctrl+D (show desktop), Ctrl+L (lock screen)
+- **Keyboard Shortcuts** — Alt+Tab (window switcher), Ctrl+D (show desktop), Ctrl+L (lock screen), Ctrl+Alt+→/← (next/prev workspace), Ctrl+Alt+1..9 (jump to workspace)
 - **Lock Screen** — Login/register form, session restore, clock display
 
 ### System Apps
@@ -203,13 +204,13 @@ See [ROADMAP.md](./docs/ROADMAP.md) for the full development roadmap.
 - Phase 4 (partial): Notifications, App Store, Media Player
 
 **Coming Next:**
-- Boot animation & splash screen
-- Desktop widgets
-- Wallpaper picker
 - AI Assistant integration
 - Sandboxed third-party apps
 - File sync & sharing
 - Full-text search
+- Trash / recycle bin
+- Video player & playlists in Media Player
+- CI/CD GitHub Actions
 
 ---
 

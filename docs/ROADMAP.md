@@ -14,7 +14,7 @@
   - [x] Maximize / restore
   - [x] Snap to edges (left/right half, quadrants)
   - [x] Z-index management (focus/blur)
-  - [ ] Multi-desktop / workspace switching
+  - [x] Multi-desktop / workspace switching
 - [x] Taskbar (top)
   - [x] App menu / Start button
   - [x] Running apps indicator
@@ -176,7 +176,7 @@
   - [x] Playback controls + volume
   - [ ] Playlist support
 - [ ] Advanced features
-  - [ ] Multi-desktop workspace UI
+  - [x] Multi-desktop workspace UI (taskbar switcher, Ctrl+Alt+Arrow / Ctrl+Alt+1..9 shortcuts, per-workspace window filtering, persisted)
   - [ ] Custom keyboard shortcut editor
   - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
   - [ ] Drag & drop between windows

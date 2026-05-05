@@ -1,18 +1,22 @@
 import { Component, For, Show, createSignal, onMount, onCleanup } from "solid-js";
-import { windowStore, focusWindow } from "../stores/window-store";
+import { currentDesktopWindows, focusWindow } from "../stores/window-store";
 
 const [showSwitcher, setShowSwitcher] = createSignal(false);
 const [selectedIndex, setSelectedIndex] = createSignal(0);
 
+function visibleWindows() {
+  return currentDesktopWindows().filter((w) => w.state !== "minimized");
+}
+
 export function openSwitcher() {
-  if (windowStore.windows.length <= 1) return;
+  if (visibleWindows().length <= 1) return;
   setSelectedIndex(1);
   setShowSwitcher(true);
 }
 
 export function closeSwitcher() {
   if (showSwitcher()) {
-    const wins = windowStore.windows.filter((w) => w.state !== "minimized");
+    const wins = visibleWindows();
     const sorted = [...wins].sort((a, b) => b.zIndex - a.zIndex);
     const selected = sorted[selectedIndex()];
     if (selected) focusWindow(selected.id);
@@ -21,13 +25,14 @@ export function closeSwitcher() {
 }
 
 export function nextWindow() {
-  const wins = windowStore.windows.filter((w) => w.state !== "minimized");
+  const wins = visibleWindows();
+  if (wins.length === 0) return;
   setSelectedIndex((i) => (i + 1) % wins.length);
 }
 
 export const WindowSwitcher: Component = () => {
   const sortedWindows = () => {
-    const wins = windowStore.windows.filter((w) => w.state !== "minimized");
+    const wins = visibleWindows();
     return [...wins].sort((a, b) => b.zIndex - a.zIndex);
   };
 

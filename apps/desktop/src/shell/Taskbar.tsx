@@ -1,8 +1,9 @@
 import { Component, For, Show, createSignal, createEffect, onCleanup } from "solid-js";
-import { windowStore, focusWindow, minimizeWindow } from "../stores/window-store";
+import { currentDesktopWindows, windowStore, focusWindow, minimizeWindow } from "../stores/window-store";
 import { toggleStartMenu, startMenuOpen } from "../stores/startmenu-store";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { toggleNotificationCenter, unreadCount } from "../stores/notification-store";
+import { WorkspaceTrayButton } from "./WorkspaceSwitcher";
 
 const Clock: Component = () => {
   const [time, setTime] = createSignal("");
@@ -70,9 +71,9 @@ const Taskbar: Component = () => {
 
       <div class="w-px h-5 bg-os-border mx-1" />
 
-      {/* Running Windows */}
+      {/* Running Windows (current workspace only) */}
       <div class="flex-1 flex items-center gap-0.5 overflow-x-auto">
-        <For each={windowStore.windows}>
+        <For each={currentDesktopWindows()}>
           {(win) => (
             <button
               class="flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs transition-colors max-w-[180px] truncate"
@@ -93,6 +94,8 @@ const Taskbar: Component = () => {
 
       {/* System Tray */}
       <div class="flex items-center gap-2">
+        <WorkspaceTrayButton />
+        <div class="w-px h-5 bg-os-border" />
         <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Wi-Fi">
           📶
         </button>
