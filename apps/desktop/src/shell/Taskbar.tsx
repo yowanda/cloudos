@@ -1,10 +1,11 @@
 import { Component, For, Show, createSignal, createEffect, onCleanup } from "solid-js";
-import { currentDesktopWindows, windowStore, focusWindow, minimizeWindow } from "../stores/window-store";
+import { currentDesktopWindows, windowStore, focusWindow, minimizeWindow, openWindow } from "../stores/window-store";
 import { toggleStartMenu, startMenuOpen } from "../stores/startmenu-store";
 import { openSpotlight } from "./Spotlight";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { toggleNotificationCenter, unreadCount } from "../stores/notification-store";
 import { WorkspaceTrayButton } from "./WorkspaceSwitcher";
+import { conflictCount } from "../vfs/conflicts";
 
 const Clock: Component = () => {
   const [time, setTime] = createSignal("");
@@ -115,6 +116,21 @@ const Taskbar: Component = () => {
         <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Volume">
           🔊
         </button>
+        <Show when={conflictCount() > 0}>
+          <button
+            class="relative text-os-warning hover:brightness-110 text-sm transition-colors"
+            title={`${conflictCount()} pending sync conflict${conflictCount() === 1 ? "" : "s"} — open Settings → Backend to resolve`}
+            onClick={(e) => {
+              e.stopPropagation();
+              openWindow({ appId: "com.cloudos.settings", title: "Settings", icon: "⚙️", width: 800, height: 600 });
+            }}
+          >
+            🔀
+            <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-os-warning text-white text-[8px] flex items-center justify-center font-bold">
+              {conflictCount() > 9 ? "9+" : conflictCount()}
+            </span>
+          </button>
+        </Show>
         <button
           class="relative text-os-text-muted hover:text-os-text text-sm transition-colors"
           title="Notifications"

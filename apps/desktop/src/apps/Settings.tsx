@@ -1199,6 +1199,156 @@ const BackendPanel: Component = () => {
           Pull snapshot from backend
         </button>
       </div>
+
+      <ConflictsPanel />
+    </div>
+  );
+};
+
+const ConflictsPanel: Component = () => {
+  const [items, setItems] = createSignal<
+    Array<{
+      path: string;
+      winner: { path: string; size: number; clock?: number; content?: string };
+      loser: { path: string; size: number; clock?: number; content?: string };
+      loserIsLocal: boolean;
+      syncedClock: number;
+      detectedAt: number;
+    }>
+  >([]);
+  const [expanded, setExpanded] = createSignal<string | null>(null);
+
+  const refresh = async () => {
+    const { listConflicts } = await import("../vfs/conflicts");
+    setItems(listConflicts() as ReturnType<typeof items>);
+  };
+
+  onMount(() => {
+    void refresh();
+    const t = setInterval(() => void refresh(), 1500);
+    onCleanup(() => clearInterval(t));
+  });
+
+  const resolve = async (path: string, keep: "winner" | "loser") => {
+    const { resolveConflict } = await import("../vfs/conflicts");
+    await resolveConflict(path, keep);
+    notify({
+      title: "Conflict resolved",
+      message: `${path} — kept ${keep === "winner" ? "remote (newer clock)" : "local edit"}`,
+      type: "success",
+      icon: "🔀",
+    });
+    void refresh();
+  };
+
+  const dismiss = async (path: string) => {
+    const { dismissConflict } = await import("../vfs/conflicts");
+    dismissConflict(path);
+    notify({ title: "Conflict dismissed", message: path, type: "info", icon: "🔀" });
+    void refresh();
+  };
+
+  const clearAll = async () => {
+    const { clearAllConflicts } = await import("../vfs/conflicts");
+    const all = clearAllConflicts();
+    notify({
+      title: "Conflicts cleared",
+      message: `${all.length} dismissed (live VFS unchanged)`,
+      type: "info",
+      icon: "🔀",
+    });
+    void refresh();
+  };
+
+  return (
+    <div class="pt-3 mt-3 border-t border-os-border space-y-2">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-semibold">Sync conflicts</h3>
+        <Show when={items().length > 0}>
+          <button
+            class="text-[10px] text-os-text-muted hover:text-os-text underline"
+            onClick={() => void clearAll()}
+          >
+            Clear all
+          </button>
+        </Show>
+      </div>
+      <Show
+        when={items().length > 0}
+        fallback={
+          <p class="text-[10px] text-os-text-muted">
+            No pending conflicts. Conflicts only appear when the same path was edited concurrently
+            on this device and another since the last successful sync.
+          </p>
+        }
+      >
+        <div class="space-y-2">
+          <For each={items()}>
+            {(c) => (
+              <div class="rounded border border-os-border bg-os-surface p-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs font-mono truncate">{c.path}</div>
+                    <div class="text-[10px] text-os-text-muted">
+                      {c.loserIsLocal ? "Your local edit was overwritten" : "Remote edit was held back by your local"}{" "}
+                      · forked at clock {c.syncedClock} · winner@{c.winner.clock ?? 0} · loser@{c.loser.clock ?? 0}
+                    </div>
+                  </div>
+                  <div class="flex gap-1 shrink-0">
+                    <button
+                      class="px-2 py-1 text-[10px] rounded bg-os-accent text-white"
+                      onClick={() => void resolve(c.path, "loser")}
+                      title="Restore the loser's content into the live VFS (push it on next sync)"
+                    >
+                      Keep {c.loserIsLocal ? "local" : "remote"}
+                    </button>
+                    <button
+                      class="px-2 py-1 text-[10px] rounded bg-os-surface-hover border border-os-border"
+                      onClick={() => void resolve(c.path, "winner")}
+                      title="Accept the merged winner — discard the conflict record"
+                    >
+                      Keep {c.loserIsLocal ? "remote" : "local"}
+                    </button>
+                    <button
+                      class="px-2 py-1 text-[10px] rounded bg-os-surface-hover border border-os-border"
+                      onClick={() => setExpanded(expanded() === c.path ? null : c.path)}
+                    >
+                      {expanded() === c.path ? "Hide" : "Diff"}
+                    </button>
+                    <button
+                      class="px-2 py-1 text-[10px] rounded text-os-text-muted hover:text-os-text"
+                      onClick={() => void dismiss(c.path)}
+                      title="Dismiss without changing the live VFS"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <Show when={expanded() === c.path}>
+                  <div class="mt-2 grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div>
+                      <div class="text-os-text-muted mb-1">
+                        Winner ({c.loserIsLocal ? "remote" : "local"}, {c.winner.size}B)
+                      </div>
+                      <pre class="p-2 rounded bg-os-bg border border-os-border overflow-auto max-h-40 whitespace-pre-wrap break-words">
+                        {c.winner.content ?? "(no content / deleted)"}
+                      </pre>
+                    </div>
+                    <div>
+                      <div class="text-os-text-muted mb-1">
+                        Loser ({c.loserIsLocal ? "local" : "remote"}, {c.loser.size}B)
+                      </div>
+                      <pre class="p-2 rounded bg-os-bg border border-os-border overflow-auto max-h-40 whitespace-pre-wrap break-words">
+                        {c.loser.content ?? "(no content / deleted)"}
+                      </pre>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 };

@@ -174,6 +174,85 @@ export function getAllTombstones(): VFSTombstone[] {
   return Array.from(tombstones.values());
 }
 
+// ───── Synced-clock map (B31, stage 3 — conflict detection) ─────────
+//
+// For each path we record the clock value that was confirmed in-sync
+// with the server (i.e. the version both sides agreed on at the last
+// successful round-trip). When applying a remote delta we use this
+// "fork point" to distinguish:
+//   • a one-sided update: only one of {local, remote} advanced past
+//     the fork point → safe LWW, no conflict.
+//   • a true concurrent conflict: both sides advanced past the fork
+//     point with different content → record a `VFSConflict` so the user
+//     can decide whether to keep the LWW winner or restore the loser.
+
+const SYNCED_CLOCKS_KEY = "cloudos:vfs:synced-clocks";
+const syncedClocks: Map<string, number> = new Map();
+let syncedClocksLoaded = false;
+
+function loadSyncedClocks() {
+  if (syncedClocksLoaded || typeof window === "undefined") return;
+  syncedClocksLoaded = true;
+  try {
+    const raw = window.localStorage.getItem(SYNCED_CLOCKS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw) as Record<string, number>;
+    if (!data || typeof data !== "object") return;
+    for (const [path, clock] of Object.entries(data)) {
+      if (typeof clock === "number") syncedClocks.set(path, clock);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function persistSyncedClocks() {
+  if (typeof window === "undefined") return;
+  try {
+    const obj: Record<string, number> = {};
+    for (const [k, v] of syncedClocks) obj[k] = v;
+    window.localStorage.setItem(SYNCED_CLOCKS_KEY, JSON.stringify(obj));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Mark `path` as fully in-sync at clock value `clock`. Called by
+ * `vfs/sync.ts` after every successful round-trip so subsequent merges
+ * can use this as the fork point for conflict detection.
+ */
+export function markPathSynced(path: string, clock: number): void {
+  loadSyncedClocks();
+  const cur = syncedClocks.get(path) ?? 0;
+  if (clock > cur) {
+    syncedClocks.set(path, clock);
+    persistSyncedClocks();
+  }
+}
+
+/**
+ * Bulk-mark every currently-known live path + tombstone as synced at
+ * its current clock — useful after a full snapshot push (`save`) where
+ * the server now mirrors the client's exact state.
+ */
+export function markAllPathsSynced(): void {
+  loadSyncedClocks();
+  for (const e of fileSystem.values()) {
+    if (typeof e.clock === "number") syncedClocks.set(e.path, e.clock);
+  }
+  for (const t of tombstones.values()) {
+    syncedClocks.set(t.path, t.clock);
+  }
+  persistSyncedClocks();
+}
+
+/** Read-only access to a path's last-synced clock (0 if never). */
+export function getSyncedClock(path: string): number {
+  loadSyncedClocks();
+  return syncedClocks.get(path) ?? 0;
+}
+
 /**
  * Apply a delta from a remote (typically the server's `POST
  * /api/v1/vfs/changes` response) into the local VFS. Unlike
@@ -189,31 +268,85 @@ export function getAllTombstones(): VFSTombstone[] {
  *    so subsequent local mutations always issue a strictly greater clock.
  *  - Tombstones with clock > local entry clock cause the local entry to
  *    be removed.
+ *  - Returns a list of `VFSConflict` records for any path where both
+ *    local and remote advanced past their fork point with different
+ *    content — caller (sync.ts) hands these to `recordConflict`.
  */
-export function mergeDelta(delta: { entries?: VFSEntry[]; tombstones?: VFSTombstone[] }): void {
+export function mergeDelta(delta: { entries?: VFSEntry[]; tombstones?: VFSTombstone[] }): VFSConflictReport[] {
+  loadSyncedClocks();
   let touched = false;
   let maxClock = latestClock;
+  const conflicts: VFSConflictReport[] = [];
 
   for (const incoming of delta.entries ?? []) {
     const c = incoming.clock ?? 0;
     if (c > maxClock) maxClock = c;
     const existing = fileSystem.get(incoming.path);
+    const fork = syncedClocks.get(incoming.path) ?? 0;
+    const localTomb = tombstones.get(incoming.path);
+
+    // Conflict detection: both sides advanced past fork → both edited
+    // independently. We still apply LWW (clock wins) but record the
+    // loser so the user can recover it.
+    if (existing) {
+      const localClock = existing.clock ?? 0;
+      const localAdvanced = localClock > fork;
+      const remoteAdvanced = c > fork;
+      if (localAdvanced && remoteAdvanced && existing.content !== incoming.content) {
+        if (c >= localClock) {
+          conflicts.push({
+            path: incoming.path,
+            winner: { ...incoming, clock: c },
+            loser: { ...existing },
+            loserIsLocal: true,
+            syncedClock: fork,
+          });
+        } else {
+          conflicts.push({
+            path: incoming.path,
+            winner: { ...existing },
+            loser: { ...incoming, clock: c },
+            loserIsLocal: false,
+            syncedClock: fork,
+          });
+        }
+      }
+    }
+
     if (existing && (existing.clock ?? 0) > c) continue;
     // If we have a local tombstone with a strictly greater clock, the
     // deletion wins and we ignore the incoming entry.
-    const tomb = tombstones.get(incoming.path);
-    if (tomb && tomb.clock > c) continue;
+    if (localTomb && localTomb.clock > c) continue;
     // The incoming entry supersedes any tombstone for that path.
-    if (tomb) {
+    if (localTomb) {
       tombstones.delete(incoming.path);
     }
     fileSystem.set(incoming.path, { ...incoming, clock: c });
+    syncedClocks.set(incoming.path, c);
     touched = true;
   }
 
   for (const t of delta.tombstones ?? []) {
     if (t.clock > maxClock) maxClock = t.clock;
     const existing = fileSystem.get(t.path);
+    const fork = syncedClocks.get(t.path) ?? 0;
+
+    // Conflict: local entry advanced past fork AND remote sent a
+    // tombstone with greater clock → user edited locally while another
+    // device deleted it. LWW says delete wins (greater clock), but
+    // preserve the local edit so the user can restore it.
+    if (existing && (existing.clock ?? 0) > fork && t.clock > fork && t.clock >= (existing.clock ?? 0)) {
+      conflicts.push({
+        path: t.path,
+        // Tombstone "winner" has no entry to surface; we use a synthetic
+        // marker. The UI checks `winner.path === ""` as "deletion".
+        winner: { name: "", path: "", isDir: false, size: 0, mimeType: "", createdAt: 0, updatedAt: 0, clock: t.clock },
+        loser: { ...existing },
+        loserIsLocal: true,
+        syncedClock: fork,
+      });
+    }
+
     if (existing && (existing.clock ?? 0) > t.clock) continue;
     if (existing) {
       fileSystem.delete(t.path);
@@ -222,6 +355,7 @@ export function mergeDelta(delta: { entries?: VFSEntry[]; tombstones?: VFSTombst
     const cur = tombstones.get(t.path);
     if (!cur || t.clock > cur.clock) {
       tombstones.set(t.path, { path: t.path, clock: t.clock });
+      syncedClocks.set(t.path, t.clock);
       touched = true;
     }
   }
@@ -232,8 +366,19 @@ export function mergeDelta(delta: { entries?: VFSEntry[]; tombstones?: VFSTombst
   }
   if (touched) {
     persistTombstones();
+    persistSyncedClocks();
     notifyFs();
   }
+  return conflicts;
+}
+
+/** Subset of VFSConflict the merge layer emits (no `detectedAt`). */
+export interface VFSConflictReport {
+  path: string;
+  winner: VFSEntry;
+  loser: VFSEntry;
+  loserIsLocal: boolean;
+  syncedClock: number;
 }
 
 // ───── Quota ─────────────────────────────────────────────────────────
@@ -449,6 +594,7 @@ function initDefaultFS() {
 initDefaultFS();
 loadTrash();
 loadTombstones();
+loadSyncedClocks();
 
 export function listDir(path: string): VFSEntry[] {
   const entries: VFSEntry[] = [];

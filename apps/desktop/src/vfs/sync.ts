@@ -4,10 +4,12 @@ import {
   exportSnapshot,
   getLatestClock,
   importSnapshot,
+  markAllPathsSynced,
   mergeDelta,
   subscribeFs,
   tombstonesSince,
 } from "./vfs";
+import { loadConflicts, recordConflict } from "./conflicts";
 import type { VFSAdapter, VFSAdapterStatus, VFSBackend } from "./adapter";
 import { memoryAdapter } from "./adapters/memory";
 import { opfsAdapter } from "./adapters/opfs";
@@ -126,10 +128,23 @@ async function tryIncrementalSync(adapter: VFSAdapter): Promise<boolean> {
   if (!resp) return false; // adapter signalled "no support" — caller falls back
 
   // Apply server's inverse delta locally. mergeDelta handles LWW so we
-  // never clobber a strictly-newer local write.
+  // never clobber a strictly-newer local write — and surfaces any
+  // genuine concurrent-edit conflicts as a returned list, which we
+  // forward to the conflict store for user review (stage 3).
   if (resp.entries.length > 0 || resp.tombstones.length > 0) {
-    mergeDelta({ entries: resp.entries, tombstones: resp.tombstones });
+    const conflictReports = mergeDelta({ entries: resp.entries, tombstones: resp.tombstones });
+    if (conflictReports.length > 0) {
+      const now = Date.now();
+      for (const cr of conflictReports) {
+        recordConflict({ ...cr, detectedAt: now });
+      }
+    }
   }
+  // Mark every path that was just confirmed in-sync as the new fork
+  // point for future merges. We use the bulk helper because everything
+  // currently in the local tree is now guaranteed to also live on the
+  // server (either we pushed it, or the server pushed it back at us).
+  markAllPathsSynced();
   // Persist the new watermark — anything with clock <= resp.clock has
   // been observed by the server.
   setLastPushedClockSig(resp.clock);
@@ -156,10 +171,13 @@ async function performSave() {
       await adapter.save(exportSnapshot());
       // After a full snapshot, the server now has every entry up to
       // our latest clock — bring the watermark forward so the next
-      // delta cycle is a true delta rather than a re-push.
+      // delta cycle is a true delta rather than a re-push, and mark
+      // every path as synced at its current clock so subsequent merges
+      // can detect concurrent edits.
       const c = getLatestClock();
       setLastPushedClockSig(c);
       saveLastPushedClock(c);
+      markAllPathsSynced();
     }
     const s = { lastSync: Date.now(), lastError: null };
     setStatus(s);
@@ -197,6 +215,9 @@ function attachFsListener() {
 export async function initVfsSync(): Promise<void> {
   if (initialized) return;
   initialized = true;
+  // Load any conflict records persisted from a previous session so the
+  // tray badge / Settings panel show them right after boot.
+  loadConflicts();
   // Try to hydrate from active backend on boot
   const backend = activeBackend();
   if (backend !== "memory") {
@@ -210,10 +231,12 @@ export async function initVfsSync(): Promise<void> {
           // After a fresh full hydrate, the watermark is whatever the
           // largest incoming clock was — pre-load that into the
           // last-pushed-clock so the next delta sync only pushes
-          // changes that have happened since.
+          // changes that have happened since, and mark every path as
+          // synced for conflict detection.
           const c = getLatestClock();
           setLastPushedClockSig(c);
           saveLastPushedClock(c);
+          markAllPathsSynced();
         }
       }
     } catch (e) {
@@ -279,6 +302,7 @@ export async function pullFromBackend(): Promise<void> {
       const c = getLatestClock();
       setLastPushedClockSig(c);
       saveLastPushedClock(c);
+      markAllPathsSynced();
       const s = { lastSync: Date.now(), lastError: null };
       setStatus(s);
       saveStatus(s);

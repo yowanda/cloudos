@@ -31,6 +31,7 @@ import {
   listDir,
   vfsStats,
 } from "../vfs/vfs";
+import { listConflicts } from "../vfs/conflicts";
 import { listManifests } from "../core/app-manifest";
 import { profile } from "./profile-store";
 import { recentApps } from "./recents-store";
@@ -198,13 +199,33 @@ const commands: Record<string, CommandHandler> = {
     run: () => {
       const c = getLatestClock();
       const ts = getAllTombstones();
+      const conflicts = listConflicts();
       const lines = [
         `Latest VFS clock: **${c}**`,
         `Tombstones tracked: **${ts.length}**`,
+        `Pending conflicts: **${conflicts.length}**`,
         "",
-        "The clock advances on every create / write / rename / move / delete and is the watermark used by the per-entry diff-sync protocol (`POST /api/v1/vfs/changes`). Tombstones record path-deletes so they propagate to the server even though deleted entries are no longer present locally.",
+        "The clock advances on every create / write / rename / move / delete and is the watermark used by the per-entry diff-sync protocol (`POST /api/v1/vfs/changes`). Tombstones record path-deletes so they propagate to the server even though deleted entries are no longer present locally. Conflicts are recorded when both this device and another edited the same path concurrently — visit Settings → Backend to resolve them.",
       ];
       return lines.join("\n");
+    },
+  },
+
+  conflicts: {
+    description: "List pending sync conflicts (concurrent edits on the same path).",
+    usage: "/conflicts",
+    run: () => {
+      const conflicts = listConflicts();
+      if (conflicts.length === 0) {
+        return "No pending sync conflicts. Diff-sync's last-write-wins handled every recent change cleanly.";
+      }
+      const lines = conflicts.slice(0, 20).map((c) => {
+        const tag = c.loserIsLocal ? "local edit lost" : "remote edit held back";
+        return `- \`${c.path}\` — ${tag} (forked@${c.syncedClock}, winner@${c.winner.clock ?? 0}, loser@${c.loser.clock ?? 0})`;
+      });
+      const head = `**${conflicts.length}** pending conflict${conflicts.length === 1 ? "" : "s"}:`;
+      const tail = conflicts.length > 20 ? `\n…and ${conflicts.length - 20} more (open Settings → Backend to see all).` : "";
+      return [head, ...lines, "", "Resolve each via Settings → Backend → Sync conflicts (Keep local / Keep remote / dismiss)."].join("\n") + tail;
     },
   },
 

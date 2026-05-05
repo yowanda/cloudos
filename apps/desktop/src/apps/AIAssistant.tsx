@@ -185,6 +185,8 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                     <code>/help</code> · <code>/ls /Documents</code> · <code>/read /path/to/file</code>
                     <br />
                     <code>/find readme</code> · <code>/storage</code> · <code>/windows</code> · <code>/now</code>
+                    <br />
+                    <code>/clock</code> · <code>/conflicts</code>
                   </div>
                 </div>
               }
