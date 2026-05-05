@@ -4,46 +4,46 @@
 
 **Goal:** Desktop environment dasar yang functional di browser.
 
-- [ ] Project setup (Turborepo + pnpm + SolidJS + Vite + Tailwind)
-- [ ] Desktop surface + wallpaper system
-- [ ] Window Manager
-  - [ ] Window chrome (title bar, close/minimize/maximize buttons)
-  - [ ] Drag to move
-  - [ ] Resize (8 handles: corners + edges)
-  - [ ] Minimize to taskbar
-  - [ ] Maximize / restore
-  - [ ] Snap to edges (left/right half, quadrants)
-  - [ ] Z-index management (focus/blur)
+- [x] Project setup (Turborepo + pnpm + SolidJS + Vite + Tailwind)
+- [x] Desktop surface + wallpaper system
+- [x] Window Manager
+  - [x] Window chrome (title bar, close/minimize/maximize buttons)
+  - [x] Drag to move
+  - [x] Resize (8 handles: corners + edges)
+  - [x] Minimize to taskbar
+  - [x] Maximize / restore
+  - [x] Snap to edges (left/right half, quadrants)
+  - [x] Z-index management (focus/blur)
   - [ ] Multi-desktop / workspace switching
-- [ ] Taskbar (top)
-  - [ ] App menu / Start button
-  - [ ] Running apps indicator
-  - [ ] System tray (clock, wifi icon, battery)
-  - [ ] Search bar
-- [ ] Dock (bottom)
-  - [ ] Pinned apps
-  - [ ] Running app indicators
-  - [ ] App launch animation
-- [ ] Start Menu / App Launcher
-  - [ ] App grid
-  - [ ] Search/filter
+- [x] Taskbar (top)
+  - [x] App menu / Start button
+  - [x] Running apps indicator
+  - [x] System tray (clock, wifi icon, battery)
+  - [x] Search bar
+- [x] Dock (bottom)
+  - [x] Pinned apps
+  - [x] Running app indicators
+  - [x] App launch animation
+- [x] Start Menu / App Launcher
+  - [x] App grid
+  - [x] Search/filter
   - [ ] Recent apps
-- [ ] Context Menu system (right-click)
-  - [ ] Desktop context menu
-  - [ ] Custom per-component menus
-- [ ] Theme engine
-  - [ ] Light theme
-  - [ ] Dark theme
-  - [ ] CSS custom properties system
-  - [ ] Glassmorphism / blur effects
+- [x] Context Menu system (right-click)
+  - [x] Desktop context menu
+  - [x] Custom per-component menus
+- [x] Theme engine
+  - [x] Light theme
+  - [x] Dark theme
+  - [x] CSS custom properties system
+  - [x] Glassmorphism / blur effects
 - [ ] Basic auth
   - [ ] Backend: register + login API
   - [ ] Lock screen UI
   - [ ] JWT session management
-- [ ] Keyboard shortcuts
-  - [ ] Alt+Tab window switcher
-  - [ ] Ctrl+D show desktop
-  - [ ] Super key → Start Menu
+- [x] Keyboard shortcuts
+  - [x] Alt+Tab window switcher
+  - [x] Ctrl+D show desktop
+  - [x] Super key → Start Menu
 
 ---
 
