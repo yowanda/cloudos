@@ -19,12 +19,14 @@ import BootScreen from "./shell/BootScreen";
 import { DesktopWidgets } from "./shell/Widgets";
 import { WorkspaceOverlay } from "./shell/WorkspaceSwitcher";
 import { desktops, nextDesktop, prevDesktop, switchDesktop } from "./stores/desktop-store";
+import { attachAudioUnlock } from "./core/sound-manager";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
 
   onMount(() => {
     registerAllApps();
+    attachAudioUnlock();
     // Alt+Tab: Window switcher
     registerShortcut({
       key: "Tab",

@@ -2,6 +2,7 @@ import { createStore, produce } from "solid-js/store";
 import type { WindowConfig, WindowState, SnapZone, WindowBounds } from "@cloudos/shared";
 import { generateId } from "@cloudos/shared";
 import { currentDesktopId } from "./desktop-store";
+import { playSound } from "../core/sound-manager";
 
 interface WindowStore {
   windows: WindowConfig[];
@@ -70,6 +71,7 @@ export function openWindow(opts: {
     })
   );
 
+  playSound("open");
   return id;
 }
 
@@ -79,6 +81,7 @@ export function closeWindow(id: string) {
       s.windows = s.windows.filter((w) => w.id !== id);
     })
   );
+  playSound("close");
 }
 
 export function focusWindow(id: string) {
@@ -106,6 +109,7 @@ export function minimizeWindow(id: string) {
       }
     })
   );
+  playSound("minimize");
 }
 
 export function maximizeWindow(id: string) {
@@ -127,6 +131,7 @@ export function maximizeWindow(id: string) {
       }
     })
   );
+  playSound("maximize");
 }
 
 export function snapWindow(id: string, zone: SnapZone) {

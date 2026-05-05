@@ -16,8 +16,11 @@
 - **Start Menu** — App grid with search/filter
 - **Context Menu** — Right-click menus (desktop, window title bar with workspace move, per-component)
 - **Theme Engine** — Dark/light mode, CSS custom properties, glassmorphism effects
+- **System Sounds** — WebAudio synth-based effects for window open/close/minimize/maximize, notifications, lock/unlock; toggle and volume slider in Settings
 - **Keyboard Shortcuts** — Alt+Tab (window switcher), Ctrl+D (show desktop), Ctrl+L (lock screen), Ctrl+Alt+→/← (next/prev workspace), Ctrl+Alt+1..9 (jump to workspace)
 - **Lock Screen** — Login/register form, session restore, clock display
+- **Trash / Recycle Bin** — Soft delete with restore, permanent delete, empty trash; persisted across reloads
+- **Storage Dashboard** — Per-folder usage breakdown, quota gauge with warnings, file/folder/trash counts in Settings → Storage
 
 ### System Apps
 | App | Description |

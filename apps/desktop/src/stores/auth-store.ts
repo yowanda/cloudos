@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { playSound } from "../core/sound-manager";
 
 export interface AuthUser {
   id: string;
@@ -44,6 +45,7 @@ export async function login(email: string, password: string) {
     setUser(data.user);
     setIsAuthenticated(true);
     setIsLocked(false);
+    playSound("unlock");
     localStorage.setItem("cloudos_token", data.token);
   } catch (e: any) {
     setAuthError(e.message);
@@ -70,6 +72,7 @@ export async function register(email: string, username: string, password: string
     setUser(data.user);
     setIsAuthenticated(true);
     setIsLocked(false);
+    playSound("unlock");
     localStorage.setItem("cloudos_token", data.token);
   } catch (e: any) {
     setAuthError(e.message);
@@ -97,6 +100,7 @@ export async function restoreSession() {
     setUser(data);
     setIsAuthenticated(true);
     setIsLocked(false);
+    playSound("unlock");
   } catch {
     localStorage.removeItem("cloudos_token");
     setIsLocked(true);
@@ -113,4 +117,5 @@ export function logout() {
 
 export function lockScreen() {
   setIsLocked(true);
+  playSound("lock");
 }

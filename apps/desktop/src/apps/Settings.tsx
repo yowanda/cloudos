@@ -2,8 +2,16 @@ import { Component, For, createSignal, Show, onCleanup, onMount } from "solid-js
 import { theme, setTheme, accentColor, setAccentColor, wallpaper, setWallpaper } from "../stores/theme-store";
 import { vfsStats, formatSize, emptyTrash, subscribeTrash, type VFSStats } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
+import {
+  soundEnabled,
+  soundVolume,
+  setSoundEnabled,
+  setSoundVolume,
+  playSound,
+  type SoundName,
+} from "../core/sound-manager";
 
-type SettingsPage = "appearance" | "wallpaper" | "storage" | "about";
+type SettingsPage = "appearance" | "wallpaper" | "sound" | "storage" | "about";
 
 const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB demo quota
 
@@ -49,8 +57,24 @@ const Settings: Component<{ windowId: string }> = () => {
   const sidebarItems: { id: SettingsPage; label: string; icon: string }[] = [
     { id: "appearance", label: "Appearance", icon: "🎨" },
     { id: "wallpaper", label: "Wallpaper", icon: "🖼️" },
+    { id: "sound", label: "Sound", icon: "🔊" },
     { id: "storage", label: "Storage", icon: "💾" },
     { id: "about", label: "About", icon: "ℹ️" },
+  ];
+
+  const soundPreviews: { name: SoundName; label: string }[] = [
+    { name: "open", label: "Window Open" },
+    { name: "close", label: "Window Close" },
+    { name: "minimize", label: "Minimize" },
+    { name: "maximize", label: "Maximize" },
+    { name: "notify", label: "Notification" },
+    { name: "success", label: "Success" },
+    { name: "warning", label: "Warning" },
+    { name: "error", label: "Error" },
+    { name: "lock", label: "Lock" },
+    { name: "unlock", label: "Unlock" },
+    { name: "click", label: "Click" },
+    { name: "focus", label: "Focus" },
   ];
 
   const usedBytes = () => stats().totalBytes + stats().trashBytes;
@@ -159,6 +183,77 @@ const Settings: Component<{ windowId: string }> = () => {
                 </button>
               )}
             </For>
+          </div>
+        </Show>
+
+        <Show when={page() === "sound"}>
+          <h2 class="text-sm font-semibold mb-4">Sound</h2>
+
+          {/* Master toggle */}
+          <div class="rounded-lg border border-os-border p-3 mb-4 flex items-center justify-between">
+            <div>
+              <div>System sounds</div>
+              <div class="text-[10px] text-os-text-muted">Play sound effects for windows, notifications, and key events.</div>
+            </div>
+            <button
+              role="switch"
+              aria-checked={soundEnabled()}
+              onClick={() => {
+                const v = !soundEnabled();
+                setSoundEnabled(v);
+                if (v) playSound("notify");
+              }}
+              class="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+              classList={{
+                "bg-os-accent": soundEnabled(),
+                "bg-os-surface": !soundEnabled(),
+              }}
+            >
+              <span
+                class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+                classList={{
+                  "left-0.5": !soundEnabled(),
+                  "left-[calc(100%-1.125rem)]": soundEnabled(),
+                }}
+              />
+            </button>
+          </div>
+
+          {/* Volume slider */}
+          <div class="rounded-lg border border-os-border p-3 mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span>Volume</span>
+              <span class="text-os-text-muted text-[10px]">{Math.round(soundVolume() * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={Math.round(soundVolume() * 100)}
+              disabled={!soundEnabled()}
+              onInput={(e) => setSoundVolume(parseInt(e.currentTarget.value, 10) / 100)}
+              onChange={() => playSound("notify")}
+              class="w-full accent-os-accent disabled:opacity-30"
+            />
+          </div>
+
+          {/* Preview */}
+          <div class="rounded-lg border border-os-border p-3">
+            <div class="text-os-text-muted mb-2 text-[10px] uppercase tracking-wider">Preview</div>
+            <div class="grid grid-cols-2 gap-2">
+              <For each={soundPreviews}>
+                {(s) => (
+                  <button
+                    class="flex items-center justify-between gap-2 px-3 py-1.5 rounded border border-os-border hover:bg-os-surface-hover transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                    disabled={!soundEnabled()}
+                    onClick={() => playSound(s.name)}
+                  >
+                    <span>{s.label}</span>
+                    <span class="text-os-text-muted text-[10px]">▶</span>
+                  </button>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
 

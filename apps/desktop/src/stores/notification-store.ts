@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
+import { playSound } from "../core/sound-manager";
 
 export interface Notification {
   id: string;
@@ -30,6 +31,20 @@ export function notify(opts: Omit<Notification, "id" | "timestamp" | "read">) {
 
   setNotifications(produce((n) => n.unshift(notification)));
   setToasts(produce((t) => t.push(notification)));
+
+  switch (notification.type) {
+    case "success":
+      playSound("success");
+      break;
+    case "warning":
+      playSound("warning");
+      break;
+    case "error":
+      playSound("error");
+      break;
+    default:
+      playSound("notify");
+  }
 
   if (notification.duration && notification.duration > 0) {
     setTimeout(() => dismissToast(notification.id), notification.duration);

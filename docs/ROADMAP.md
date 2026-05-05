@@ -180,7 +180,7 @@
   - [ ] Custom keyboard shortcut editor
   - [x] Widget system (desktop widgets: clock, weather, system monitor, quick notes)
   - [ ] Drag & drop between windows
-  - [ ] System sounds
+  - [x] System sounds (WebAudio synth: open/close/min/max, notify success/warning/error, lock/unlock; Settings toggle + volume + preview)
   - [x] Boot animation / splash screen
 
 ---
