@@ -11,6 +11,8 @@ import { registerShortcut, initShortcuts } from "./core/shortcut-manager";
 import { toggleStartMenu } from "./stores/startmenu-store";
 import { windowStore, minimizeWindow } from "./stores/window-store";
 import { registerAllApps } from "./apps";
+import LockScreen from "./shell/LockScreen";
+import { lockScreen } from "./stores/auth-store";
 
 const App: Component = () => {
   onMount(() => {
@@ -50,6 +52,14 @@ const App: Component = () => {
       description: "Show desktop",
     });
 
+    // Ctrl+L: Lock screen
+    registerShortcut({
+      key: "l",
+      ctrl: true,
+      handler: lockScreen,
+      description: "Lock screen",
+    });
+
     initShortcuts();
   });
 
@@ -63,6 +73,7 @@ const App: Component = () => {
         <WindowSwitcher />
         <Taskbar />
         <Dock />
+        <LockScreen />
       </div>
     </ThemeProvider>
   );

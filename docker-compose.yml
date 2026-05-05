@@ -1,0 +1,100 @@
+services:
+  # PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cloudos
+      POSTGRES_PASSWORD: cloudos
+      POSTGRES_DB: cloudos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # Meilisearch (full-text search)
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: development
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "7700:7700"
+
+  # CloudOS Backend (Go + Fiber)
+  server:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:-cloudos-production-secret-change-me}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: cloudos
+      DB_PASSWORD: cloudos
+      DB_NAME: cloudos
+      DB_SSLMODE: disable
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: cloudos-files
+      S3_USE_SSL: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4100}
+    ports:
+      - "3000:3000"
+
+  # CloudOS Frontend (SolidJS)
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/desktop/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "4100:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  meilisearch_data:
