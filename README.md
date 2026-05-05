@@ -28,7 +28,7 @@
 | File Manager | Grid/list view, breadcrumbs, sidebar, create/rename/delete |
 | Terminal | Built-in command parser (ls, help, neofetch, echo, etc.) **+ optional real shell** via WebSocket pty backend (xterm.js, color/UTF-8/resize); auto-detected from `/api/v1/pty/health` |
 | Text Editor | Real code editor — multi-tab, syntax highlighting (JS/TS/JSON/Python/CSS/HTML/Markdown), `Ctrl+S` saves to VFS, `Ctrl+N` new tab, `Ctrl+W` close, `Ctrl+F` find/replace, opens automatically when you double-click a text/JSON file in File Manager |
-| Browser | iframe-based web browser with URL bar |
+| Browser | iframe-based web browser with URL bar, **back/forward** (own per-window stack), **reload**, **bookmarks** (★ toggle, persisted), **history panel** (last 200 visits, clear-all + per-entry remove). Same-origin restrictions force us to track our own back/forward instead of using the iframe's `contentWindow.history` |
 | Calculator | Fully functional calculator |
 | Settings | Theme toggle, accent color picker, system info |
 | Notes | Notepad app |

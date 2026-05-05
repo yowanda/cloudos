@@ -93,6 +93,10 @@
   - [x] About (system info)
 - [x] Calculator app
 - [x] Browser app (iframe-based)
+  - [x] **Back / forward navigation** — own per-window stack (iframe `contentWindow.history` is blocked by same-origin policy)
+  - [x] **Reload** — re-assigns iframe `src` to itself to force a fresh load
+  - [x] **History** — last 200 visits, persisted to `localStorage:cloudos:browser:history`, clear-all + per-entry remove
+  - [x] **Bookmarks** — ★ toggle in toolbar, persisted to `localStorage:cloudos:browser:bookmarks`, side panel for management
 - [x] Notes app
 - [x] Notification system
   - [x] Toast notifications
