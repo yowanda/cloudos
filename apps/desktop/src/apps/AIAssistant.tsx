@@ -175,7 +175,7 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                   <p class="text-[11px] mt-1">
                     Pluggable LLM chat. Default provider is the offline <strong>Echo</strong> mock —
                     pick a real provider in the ⚙ Settings tab. Free presets ready to plug in:
-                    <strong> Akash, Groq, OpenRouter, Gemini, Cerebras, Together, Mistral, HuggingFace</strong>,
+                    <strong> Groq, OpenRouter, Gemini, Cerebras, Together, Mistral</strong>,
                     or run fully local with Ollama.
                   </p>
                   <p class="text-[11px] mt-3">
@@ -362,9 +362,6 @@ const SettingsPanel: Component = () => {
             >
               <select
                 class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent font-mono"
-                value={
-                  activePreset().suggestedModels.includes(cfg().model) ? cfg().model : "__custom__"
-                }
                 onChange={(e) => {
                   const v = e.currentTarget.value;
                   if (v === "__custom__") return;
@@ -372,9 +369,18 @@ const SettingsPanel: Component = () => {
                 }}
               >
                 <For each={activePreset().suggestedModels}>
-                  {(m) => <option value={m}>{m}</option>}
+                  {(m) => (
+                    <option value={m} selected={cfg().model === m}>
+                      {m}
+                    </option>
+                  )}
                 </For>
-                <option value="__custom__">— custom (type below) —</option>
+                <option
+                  value="__custom__"
+                  selected={!activePreset().suggestedModels.includes(cfg().model)}
+                >
+                  — custom (type below) —
+                </option>
               </select>
               <input
                 type="text"
