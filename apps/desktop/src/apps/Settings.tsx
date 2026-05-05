@@ -616,12 +616,15 @@ const Settings: Component<{ windowId: string }> = () => {
                 <div class="text-[10px] text-os-text-muted mt-1 leading-relaxed">
                   Switch the Text Editor app to Microsoft's Monaco editor — the
                   same engine that powers VS Code. Adds bracket matching,
-                  multi-cursor, native find &amp; replace UI, and richer syntax
-                  highlighting. <strong>~3 MB extra</strong> downloaded the first
-                  time it's enabled (lazy-loaded chunk; cached by the service
-                  worker afterwards). Off by default — the lightweight built-in
-                  textarea + tokenizer overlay covers the 80% case at zero extra
-                  bundle cost.
+                  multi-cursor, native find &amp; replace UI, plus a real
+                  language service for <strong>JS / TS</strong> (autocomplete,
+                  hover, diagnostics) and <strong>JSON</strong> (schema
+                  validation). <strong>~3 MB</strong> for the editor core +
+                  <strong>~1 MB</strong> for the JSON / TS workers fetched on
+                  first toggle (lazy-loaded chunks cached by the service worker
+                  thereafter). Off by default — the lightweight built-in
+                  textarea + tokenizer overlay covers the 80% case at zero
+                  extra bundle cost.
                 </div>
               </div>
             </label>

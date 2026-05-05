@@ -8,11 +8,18 @@
  * import fails (offline + no service-worker cache, network blocked, …)
  * it gracefully falls back to a plain textarea so the user can still edit.
  *
- * Workers: we wire only the base `editor.worker` via Vite's `?worker`
- * import. Language workers (json, ts, css, html) are intentionally NOT
- * loaded — they each add another ~500 KB chunk and provide IntelliSense
- * we don't yet expose UI for. Monaco falls back to its own internal
- * tokenizers without them, so syntax highlighting still works.
+ * Workers: the base `editor.worker` is wired up unconditionally (it's the
+ * cheapest one and Monaco refuses to render without *some* worker). Per-
+ * language workers — `json.worker`, `ts.worker` (handles both JS and TS),
+ * `css.worker`, `html.worker` — are imported lazily inside
+ * `MonacoEnvironment.getWorker(_, label)` so they only enter the bundle as
+ * separate chunks when the user actually opens a file in that language.
+ * Vite's `?worker` syntax + dynamic `import()` means each one becomes its
+ * own ~500 KB chunk that's never fetched on a JSON-less / CSS-less load.
+ *
+ * Other Monaco-supported languages (Python, Go, Rust, …) get tokenization
+ * via Monaco's internal Monarch grammars without needing a worker, so they
+ * just render with syntax highlighting and no diagnostics.
  */
 
 import { Component, createEffect, createSignal, onCleanup, onMount } from "solid-js";
@@ -38,12 +45,30 @@ function toMonacoLang(lang: Language): string {
 let workerInstalled = false;
 async function installMonacoWorker(): Promise<void> {
   if (workerInstalled) return;
-  // Vite's `?worker` syntax produces a constructor that yields a real
-  // Worker pointing at the bundled chunk. We attach via the global
-  // `MonacoEnvironment` hook Monaco probes on first editor creation.
-  const editorWorker = (await import("monaco-editor/esm/vs/editor/editor.worker?worker")).default;
-  (self as unknown as { MonacoEnvironment?: { getWorker: () => Worker } }).MonacoEnvironment = {
-    getWorker() {
+  // Vite's `?worker` syntax produces a default-exported constructor that
+  // yields a real Worker pointing at the bundled chunk. We pre-resolve all
+  // workers in parallel before installing `MonacoEnvironment` because
+  // Monaco's `getWorker(workerId, label)` hook is *synchronous* — we can't
+  // return a Promise<Worker> there.
+  //
+  // Each worker is its own Vite chunk, so even though we await them in
+  // parallel here, only the chunks fetched land on the wire — no byte
+  // enters the initial bundle. We deliberately ship the JSON and TS/JS
+  // workers (the file types CloudOS actually edits — configs + scripts)
+  // and skip the CSS / HTML workers to keep the on-toggle download cost
+  // closer to ~1 MB instead of ~2 MB.
+  const [editorWorker, jsonWorker, tsWorker] = await Promise.all([
+    import("monaco-editor/esm/vs/editor/editor.worker?worker").then((m) => m.default),
+    import("monaco-editor/esm/vs/language/json/json.worker?worker").then((m) => m.default),
+    import("monaco-editor/esm/vs/language/typescript/ts.worker?worker").then((m) => m.default),
+  ]);
+
+  (self as unknown as {
+    MonacoEnvironment?: { getWorker: (workerId: string, label: string) => Worker };
+  }).MonacoEnvironment = {
+    getWorker(_workerId: string, label: string) {
+      if (label === "json") return new jsonWorker();
+      if (label === "typescript" || label === "javascript") return new tsWorker();
       return new editorWorker();
     },
   };
