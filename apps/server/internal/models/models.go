@@ -63,6 +63,22 @@ type App struct {
 	CreatedAt   time.Time      `json:"created_at"`
 }
 
+// AppSubmission tracks third-party app submissions through the
+// developer portal. A row starts in "pending" and an admin moves it
+// to "approved" or "rejected". On approval an App row is created /
+// upserted from the snapshot stored in Manifest.
+type AppSubmission struct {
+	ID          uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	SubmittedBy uuid.UUID      `gorm:"type:uuid;not null;index" json:"submitted_by"`
+	AppID       string         `gorm:"size:100;not null;index" json:"app_id"`
+	Manifest    map[string]any `gorm:"type:jsonb;not null;serializer:json" json:"manifest"`
+	Status      string         `gorm:"size:20;default:pending;index" json:"status"`
+	ReviewerID  *uuid.UUID     `gorm:"type:uuid" json:"reviewer_id,omitempty"`
+	ReviewNote  string         `gorm:"type:text" json:"review_note,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
 func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == uuid.Nil {
 		u.ID = uuid.New()
@@ -80,6 +96,16 @@ func (f *File) BeforeCreate(tx *gorm.DB) error {
 func (fs *FileShare) BeforeCreate(tx *gorm.DB) error {
 	if fs.ID == uuid.Nil {
 		fs.ID = uuid.New()
+	}
+	return nil
+}
+
+func (s *AppSubmission) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == uuid.Nil {
+		s.ID = uuid.New()
+	}
+	if s.Status == "" {
+		s.Status = "pending"
 	}
 	return nil
 }

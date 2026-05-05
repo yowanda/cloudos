@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 type Config struct {
 	Port       string
@@ -14,6 +17,11 @@ type Config struct {
 	EnablePTY bool
 	// Shell to spawn for PTY sessions (e.g. /bin/bash, /bin/sh).
 	PTYShell string
+	// AdminEmails is the lower-cased set of emails treated as
+	// administrators (currently only used by the developer-portal
+	// submission review endpoints). Comma-separated in env via
+	// ADMIN_EMAILS=alice@x.com,bob@y.com — never sent to clients.
+	AdminEmails map[string]struct{}
 }
 
 type DBConfig struct {
@@ -55,9 +63,23 @@ func Load() *Config {
 			Region:    getEnv("S3_REGION", "us-east-1"),
 			UseSSL:    getEnv("S3_USE_SSL", "false") == "true",
 		},
-		EnablePTY: getEnv("ENABLE_PTY", "false") == "true",
-		PTYShell:  getEnv("PTY_SHELL", "/bin/bash"),
+		EnablePTY:   getEnv("ENABLE_PTY", "false") == "true",
+		PTYShell:    getEnv("PTY_SHELL", "/bin/bash"),
+		AdminEmails: parseAdminEmails(getEnv("ADMIN_EMAILS", "")),
 	}
+}
+
+// parseAdminEmails turns "Alice@x.com, bob@y.com" into a normalised
+// set: trimmed, lower-cased, ignoring empty entries.
+func parseAdminEmails(s string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, raw := range strings.Split(s, ",") {
+		v := strings.ToLower(strings.TrimSpace(raw))
+		if v != "" {
+			out[v] = struct{}{}
+		}
+	}
+	return out
 }
 
 func (c *DBConfig) DSN() string {

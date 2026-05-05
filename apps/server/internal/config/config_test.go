@@ -90,6 +90,42 @@ func TestDBConfigDSN(t *testing.T) {
 	}
 }
 
+// TestParseAdminEmails verifies the comma-separated parsing strips
+// whitespace, lower-cases, and skips empties — both directly via the
+// internal helper and via Load() so we know wiring is correct.
+func TestParseAdminEmails(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string // sorted set
+	}{
+		{"empty", "", nil},
+		{"whitespace", "   ", nil},
+		{"single", "alice@example.com", []string{"alice@example.com"}},
+		{"upper", "ALICE@example.com", []string{"alice@example.com"}},
+		{"trim", "  bob@x.com ", []string{"bob@x.com"}},
+		{
+			"multi",
+			"Alice@x.com, bob@y.com,,charlie@z.com",
+			[]string{"alice@x.com", "bob@y.com", "charlie@z.com"},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseAdminEmails(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("parseAdminEmails(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+			for _, w := range tc.want {
+				if _, ok := got[w]; !ok {
+					t.Errorf("parseAdminEmails(%q) missing %q", tc.in, w)
+				}
+			}
+		})
+	}
+}
+
 // TestS3UseSSLToggle verifies the UseSSL string-to-bool round-trip.
 func TestS3UseSSLToggle(t *testing.T) {
 	cases := []struct {

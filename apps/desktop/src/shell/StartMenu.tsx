@@ -24,6 +24,7 @@ const builtinApps: AppEntry[] = [
   { id: "com.cloudos.appstore", name: "App Store", icon: "🏪", category: "System" },
   { id: "com.cloudos.shortcuts", name: "Shortcuts", icon: "⌨️", category: "System" },
   { id: "com.cloudos.assistant", name: "Assistant", icon: "🤖", category: "Productivity" },
+  { id: "com.cloudos.devportal", name: "Developer Portal", icon: "🛠️", category: "System" },
 ];
 
 export const StartMenu: Component = () => {

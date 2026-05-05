@@ -30,6 +30,7 @@ func Migrate() {
 		&models.File{},
 		&models.FileShare{},
 		&models.App{},
+		&models.AppSubmission{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)

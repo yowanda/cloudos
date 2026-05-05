@@ -44,6 +44,7 @@ func main() {
 	vfsHandler := handlers.NewVFSHandler("data/vfs")
 	shareHandler := handlers.NewShareHandler(database.DB)
 	ptyHandler := handlers.NewPTYHandler(authService, cfg.PTYShell, cfg.EnablePTY)
+	devHandler := handlers.NewDevHandler(database.DB, cfg.AdminEmails)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -135,6 +136,20 @@ func main() {
 	protected.Post("/shares", shareHandler.Create)
 	protected.Get("/shares", shareHandler.List)
 	protected.Delete("/shares/:id", shareHandler.Revoke)
+
+	// Developer portal — third-party app submissions + admin review.
+	// `/apps/published` is public so the AppStore can browse without
+	// authentication; everything else is gated behind auth (and admin
+	// review endpoints additionally gated by RequireAdmin).
+	api.Get("/apps/published", devHandler.ListPublished)
+	protected.Get("/dev/whoami", devHandler.WhoAmI)
+	protected.Post("/dev/submissions", devHandler.Submit)
+	protected.Get("/dev/submissions/mine", devHandler.ListMine)
+	admin := protected.Group("/dev/admin", devHandler.RequireAdmin())
+	admin.Get("/submissions", devHandler.AdminList)
+	admin.Get("/submissions/:id", devHandler.AdminGet)
+	admin.Post("/submissions/:id/approve", devHandler.AdminApprove)
+	admin.Post("/submissions/:id/reject", devHandler.AdminReject)
 
 	// PTY (browser Terminal). Health is public so the frontend can decide
 	// whether to enable remote-shell mode without first acquiring a token.

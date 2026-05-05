@@ -11,6 +11,7 @@ import AppStore from "./AppStore";
 import MediaPlayer from "./MediaPlayer";
 import Shortcuts from "./Shortcuts";
 import AIAssistant from "./AIAssistant";
+import DeveloperPortal from "./DeveloperPortal";
 import { registerDemoManifests } from "../manifests";
 
 export function registerAllApps() {
@@ -27,4 +28,5 @@ export function registerAllApps() {
   registerAppComponent("com.cloudos.mediaplayer", MediaPlayer);
   registerAppComponent("com.cloudos.shortcuts", Shortcuts);
   registerAppComponent("com.cloudos.assistant", AIAssistant);
+  registerAppComponent("com.cloudos.devportal", DeveloperPortal);
 }
