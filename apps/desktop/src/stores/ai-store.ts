@@ -1,5 +1,10 @@
 import { createSignal } from "solid-js";
-import { tryExecuteSlashCommand } from "./ai-tools";
+import {
+  type ConfirmationPayload,
+  describeConfirmation,
+  executeConfirmedAction,
+  tryExecuteSlashCommand,
+} from "./ai-tools";
 
 export type AIRole = "user" | "assistant" | "system";
 
@@ -8,6 +13,13 @@ export interface AIMessage {
   role: AIRole;
   content: string;
   timestamp: number;
+  /**
+   * Set on assistant messages whose body is a preview of a queued
+   * dangerous mutation (`/write`, `/mkdir`, `/rm`, `/mv`). The chat
+   * UI renders Run / Cancel buttons until the user resolves it via
+   * `runPendingConfirmation` or `cancelPendingConfirmation`.
+   */
+  pendingConfirmation?: ConfirmationPayload;
 }
 
 export interface AIConversation {
@@ -29,6 +41,12 @@ export interface AIConfig {
   model: string;
   /** Optional system prompt. */
   systemPrompt: string;
+  /**
+   * When true, the dangerous slash commands (`/write`, `/mkdir`, `/rm`,
+   * `/mv`) skip the Run / Cancel confirmation gate and run their
+   * mutation immediately. Default off — the gate is the safer choice.
+   */
+  dangerousAlwaysAllow: boolean;
 }
 
 const CONV_KEY = "cloudos:ai:conversations";
@@ -39,7 +57,9 @@ const defaultConfig: AIConfig = {
   baseUrl: "https://api.openai.com/v1",
   apiKey: "",
   model: "gpt-4o-mini",
-  systemPrompt: "You are CloudOS Assistant, an AI helper inside a browser-based desktop OS. Be concise and helpful.",
+  systemPrompt:
+    "You are CloudOS Assistant, an AI helper inside a browser-based desktop OS. Be concise and helpful.",
+  dangerousAlwaysAllow: false,
 };
 
 function loadConvs(): AIConversation[] {
@@ -167,6 +187,61 @@ function appendMessage(convId: string, msg: AIMessage) {
   persistConvs();
 }
 
+/**
+ * Replace a single message in-place with the supplied patch fields and
+ * persist. Used by the Run / Cancel confirmation flow to swap the
+ * preview text for the outcome text without touching surrounding
+ * messages.
+ */
+function patchMessage(convId: string, msgId: string, patch: Partial<AIMessage>) {
+  setConversations(
+    conversations().map((c) =>
+      c.id === convId
+        ? {
+            ...c,
+            messages: c.messages.map((m) => (m.id === msgId ? { ...m, ...patch } : m)),
+            updatedAt: Date.now(),
+          }
+        : c,
+    ),
+  );
+  persistConvs();
+}
+
+/**
+ * Apply the queued mutation attached to an assistant message and
+ * replace its body with the outcome text. Clears
+ * `pendingConfirmation` so the Run / Cancel buttons disappear.
+ */
+export function runPendingConfirmation(convId: string, msgId: string) {
+  const conv = conversations().find((c) => c.id === convId);
+  const msg = conv?.messages.find((m) => m.id === msgId);
+  if (!msg?.pendingConfirmation) return;
+  const payload = msg.pendingConfirmation;
+  let outcome: string;
+  try {
+    outcome = executeConfirmedAction(payload);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    outcome = `Failed to apply confirmed action: ${m}`;
+  }
+  patchMessage(convId, msgId, { content: outcome, pendingConfirmation: undefined });
+}
+
+/**
+ * Discard a queued mutation without touching the VFS, replacing the
+ * preview body with a "Cancelled" notice.
+ */
+export function cancelPendingConfirmation(convId: string, msgId: string) {
+  const conv = conversations().find((c) => c.id === convId);
+  const msg = conv?.messages.find((m) => m.id === msgId);
+  if (!msg?.pendingConfirmation) return;
+  patchMessage(convId, msgId, {
+    content: "Cancelled — no changes made.",
+    pendingConfirmation: undefined,
+  });
+}
+
 interface ProviderRequest {
   messages: { role: AIRole; content: string }[];
   config: AIConfig;
@@ -292,19 +367,28 @@ export async function sendMessage(text: string, opts: SendOptions = {}): Promise
   // rule-based tool layer in `ai-tools.ts`. This means the Assistant has
   // useful read-only powers (peeking at VFS files, listing windows /
   // apps, checking storage usage) in every mode, including offline echo.
-  // See src/stores/ai-tools.ts for the full command list.
-  const tool = await tryExecuteSlashCommand(text);
+  // Mutating commands (`/write`, `/mkdir`, `/rm`, `/mv`) attach a
+  // `pendingConfirmation` payload to the assistant message so the chat
+  // UI can render Run / Cancel — unless `dangerousAlwaysAllow` is on,
+  // in which case they execute immediately. See ai-tools.ts.
+  const cfg = config();
+  const tool = await tryExecuteSlashCommand(text, {
+    alwaysAllow: cfg.dangerousAlwaysAllow,
+  });
   if (tool.handled) {
+    const previewBody = tool.confirmation
+      ? describeConfirmation(tool.confirmation)
+      : tool.reply;
     appendMessage(conv.id, {
       id: `msg-${Date.now()}-${nextMsg++}`,
       role: "assistant",
-      content: tool.reply,
+      content: previewBody,
       timestamp: Date.now(),
+      pendingConfirmation: tool.confirmation,
     });
     return;
   }
 
-  const cfg = config();
   const sys = opts.systemPrompt ?? cfg.systemPrompt;
   const history: { role: AIRole; content: string }[] = [];
   if (sys) history.push({ role: "system", content: sys });

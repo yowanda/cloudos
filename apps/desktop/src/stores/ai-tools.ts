@@ -23,13 +23,19 @@
  */
 
 import {
+  createDir,
+  deleteEntry,
   exportSnapshot,
   formatSize,
-  getEntry,
   getAllTombstones,
+  getEntry,
   getLatestClock,
   listDir,
+  moveEntry,
+  moveToTrash,
+  renameEntry,
   vfsStats,
+  writeFile,
 } from "../vfs/vfs";
 import { listConflicts } from "../vfs/conflicts";
 import { listManifests } from "../core/app-manifest";
@@ -38,11 +44,48 @@ import { recentApps } from "./recents-store";
 import { currentDesktopWindows, focusedWindow } from "./window-store";
 import { currentDesktop, desktops } from "./desktop-store";
 
+/**
+ * Describes a pending mutation requested by a dangerous slash command
+ * (`/write`, `/mkdir`, `/rm`, `/mv`). The payload is computed by the
+ * command's `run()` against the current VFS state — no mutation has
+ * happened yet. Confirming via `executeConfirmedAction(payload)` is
+ * what actually changes the VFS.
+ */
+export type ConfirmationPayload =
+  | {
+      kind: "write";
+      path: string;
+      content: string;
+      /** Size of the existing file at `path`, or null if it doesn't exist yet. */
+      existingSize: number | null;
+    }
+  | { kind: "mkdir"; path: string; parentPath: string; name: string }
+  | {
+      kind: "rm";
+      path: string;
+      hard: boolean;
+      isDir: boolean;
+      /** Number of descendant entries under a directory target (0 for files). */
+      descendantCount: number;
+    }
+  | {
+      kind: "mv";
+      srcPath: string;
+      finalPath: string;
+      mode: "rename" | "move" | "move+rename";
+    };
+
 export interface ToolResult {
   /** True if the input was handled as a slash command (LLM should be skipped). */
   handled: boolean;
   /** The reply to surface. Multi-line text. Empty when handled=false. */
   reply: string;
+  /**
+   * Set when the command needs the user to confirm a mutation before it
+   * runs. The chat UI should render Run / Cancel buttons and call
+   * `executeConfirmedAction(payload)` only on Run.
+   */
+  confirmation?: ConfirmationPayload;
 }
 
 interface CommandHandler {
@@ -50,8 +93,16 @@ interface CommandHandler {
   description: string;
   /** Sample usage shown in `/help`. */
   usage: string;
-  /** The actual handler. Receives the raw arg string after the command name. */
-  run: (args: string) => string | Promise<string>;
+  /**
+   * The actual handler. Receives the raw arg string after the command
+   * name. May return either a plain text reply (read-only commands) or
+   * a `ConfirmationPayload` describing a queued mutation (dangerous
+   * commands). Returning a string from a dangerous command means the
+   * command short-circuited with a validation error and no payload.
+   */
+  run: (args: string) => string | ConfirmationPayload | Promise<string | ConfirmationPayload>;
+  /** Mutating commands gated by the Run / Cancel confirmation flow. */
+  dangerous?: boolean;
 }
 
 const commands: Record<string, CommandHandler> = {
@@ -293,6 +344,152 @@ const commands: Record<string, CommandHandler> = {
     usage: "/now",
     run: () => `It is **${new Date().toLocaleString()}** on your device.`,
   },
+
+  write: {
+    description: "Create or overwrite a file. Asks for confirmation before writing.",
+    usage: "/write <path> <content>",
+    dangerous: true,
+    run: (args) => {
+      const trimmed = args.trim();
+      if (!trimmed) return "Usage: `/write <path> <content>`";
+      const space = trimmed.indexOf(" ");
+      if (space === -1) {
+        return "Usage: `/write <path> <content>` — provide content after the path.";
+      }
+      const rawPath = trimmed.slice(0, space).trim();
+      const content = trimmed.slice(space + 1);
+      if (!rawPath) return "Usage: `/write <path> <content>`";
+      const path = absPath(rawPath);
+      if (path === "/") return "Refusing to /write to the VFS root.";
+      const existing = getEntry(path);
+      if (existing?.isDir) return `\`${path}\` is a directory — refusing to overwrite.`;
+      return {
+        kind: "write",
+        path,
+        content,
+        existingSize: existing ? existing.size : null,
+      } satisfies ConfirmationPayload;
+    },
+  },
+
+  mkdir: {
+    description: "Create a directory. Asks for confirmation before creating.",
+    usage: "/mkdir <path>",
+    dangerous: true,
+    run: (args) => {
+      const rawPath = args.trim();
+      if (!rawPath) return "Usage: `/mkdir <path>`";
+      const path = absPath(rawPath);
+      if (path === "/") return "Cannot /mkdir the VFS root — it already exists.";
+      if (getEntry(path)) return `\`${path}\` already exists.`;
+      const lastSlash = path.lastIndexOf("/");
+      const parentPath = lastSlash === 0 ? "/" : path.slice(0, lastSlash);
+      const name = path.slice(lastSlash + 1);
+      if (!name) return `Invalid path: \`${path}\`.`;
+      const parent = getEntry(parentPath);
+      if (!parent) return `Parent directory \`${parentPath}\` does not exist.`;
+      if (!parent.isDir) return `Parent path \`${parentPath}\` is a file, not a directory.`;
+      return {
+        kind: "mkdir",
+        path,
+        parentPath,
+        name,
+      } satisfies ConfirmationPayload;
+    },
+  },
+
+  rm: {
+    description:
+      "Delete a file or directory. Default sends to /Trash; `--hard` permanently deletes. Asks for confirmation.",
+    usage: "/rm [--hard] <path>",
+    dangerous: true,
+    run: (args) => {
+      const tokens = args.trim().split(/\s+/).filter(Boolean);
+      let hard = false;
+      while (tokens.length > 0 && tokens[0].startsWith("--")) {
+        const flag = tokens.shift();
+        if (flag === "--hard") {
+          hard = true;
+        } else {
+          return `Unknown flag \`${flag}\`. Usage: \`/rm [--hard] <path>\``;
+        }
+      }
+      if (tokens.length === 0) return "Usage: `/rm [--hard] <path>`";
+      const path = absPath(tokens.join(" "));
+      if (path === "/") return "Refusing to /rm the VFS root.";
+      const entry = getEntry(path);
+      if (!entry) return `No such entry: \`${path}\``;
+      let descendantCount = 0;
+      if (entry.isDir) {
+        const all = exportSnapshot();
+        const prefix = `${path}/`;
+        descendantCount = all.filter((e) => e.path.startsWith(prefix)).length;
+      }
+      return {
+        kind: "rm",
+        path,
+        hard,
+        isDir: entry.isDir,
+        descendantCount,
+      } satisfies ConfirmationPayload;
+    },
+  },
+
+  mv: {
+    description:
+      "Move or rename a file/directory. If <dst> is an existing directory, moves into it; otherwise renames. Asks for confirmation.",
+    usage: "/mv <src> <dst>",
+    dangerous: true,
+    run: (args) => {
+      const tokens = args.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length !== 2) {
+        return "Usage: `/mv <src> <dst>` — exactly two paths required.";
+      }
+      const srcPath = absPath(tokens[0]);
+      const dstRaw = absPath(tokens[1]);
+      if (srcPath === "/") return "Refusing to /mv the VFS root.";
+      const src = getEntry(srcPath);
+      if (!src) return `No such entry: \`${srcPath}\``;
+
+      const dst = getEntry(dstRaw);
+      let finalPath: string;
+      let mode: "rename" | "move" | "move+rename";
+
+      if (dst?.isDir) {
+        // Move src into dst directory, preserving src's name.
+        finalPath = dstRaw === "/" ? `/${src.name}` : `${dstRaw}/${src.name}`;
+        mode = "move";
+      } else if (dst && !dst.isDir) {
+        return `\`${dstRaw}\` already exists as a file — refusing to overwrite.`;
+      } else {
+        // Treat dst as a full target path (rename / move+rename).
+        const lastSlash = dstRaw.lastIndexOf("/");
+        const parentPath = lastSlash === 0 ? "/" : dstRaw.slice(0, lastSlash);
+        const newName = dstRaw.slice(lastSlash + 1);
+        if (!newName) return `Invalid destination path: \`${dstRaw}\`.`;
+        const parent = getEntry(parentPath);
+        if (!parent) return `Destination directory \`${parentPath}\` does not exist.`;
+        if (!parent.isDir) return `Destination parent \`${parentPath}\` is a file, not a directory.`;
+        finalPath = dstRaw;
+        const srcLastSlash = srcPath.lastIndexOf("/");
+        const srcParent = srcLastSlash === 0 ? "/" : srcPath.slice(0, srcLastSlash);
+        mode = srcParent === parentPath ? "rename" : "move+rename";
+      }
+
+      if (finalPath === srcPath) return "Source and destination are the same — nothing to do.";
+      if (finalPath.startsWith(`${srcPath}/`)) {
+        return `Cannot move \`${srcPath}\` into its own descendant \`${finalPath}\`.`;
+      }
+      if (getEntry(finalPath)) return `\`${finalPath}\` already exists.`;
+
+      return {
+        kind: "mv",
+        srcPath,
+        finalPath,
+        mode,
+      } satisfies ConfirmationPayload;
+    },
+  },
 };
 
 function helpText(): string {
@@ -303,10 +500,17 @@ function helpText(): string {
   const names = Object.keys(commands).sort();
   for (const name of names) {
     const c = commands[name];
-    lines.push(`- \`${c.usage}\` — ${c.description}`);
+    const marker = c.dangerous ? "⚠️ " : "";
+    lines.push(`- ${marker}\`${c.usage}\` — ${c.description}`);
   }
   lines.push("");
-  lines.push("Anything that doesn't start with `/` is forwarded to the configured LLM (or echoed in offline mode).");
+  lines.push(
+    "⚠️ marks mutating commands — they ask for Run / Cancel confirmation in chat unless 'Always allow dangerous commands' is enabled in Settings.",
+  );
+  lines.push("");
+  lines.push(
+    "Anything that doesn't start with `/` is forwarded to the configured LLM (or echoed in offline mode).",
+  );
   return lines.join("\n");
 }
 
@@ -317,12 +521,140 @@ function absPath(p: string): string {
 }
 
 /**
+ * Render a human-readable preview of what would happen if the user
+ * confirms a queued mutation. Used as the assistant message body
+ * shown above the Run / Cancel buttons.
+ */
+export function describeConfirmation(p: ConfirmationPayload): string {
+  switch (p.kind) {
+    case "write": {
+      const sizeLabel = `${p.content.length} bytes`;
+      if (p.existingSize === null) {
+        return `Run \`/write\` to **create** \`${p.path}\` (${sizeLabel})?`;
+      }
+      return `Run \`/write\` to **overwrite** \`${p.path}\` — replacing ${p.existingSize} bytes with ${sizeLabel}?`;
+    }
+    case "mkdir":
+      return `Run \`/mkdir\` to create directory \`${p.path}\`?`;
+    case "rm": {
+      const target = p.isDir
+        ? `directory \`${p.path}\`${p.descendantCount > 0 ? ` (and its ${p.descendantCount} descendant${p.descendantCount === 1 ? "" : "s"})` : ""}`
+        : `file \`${p.path}\``;
+      if (p.hard) {
+        return `Run \`/rm --hard\` to **permanently delete** ${target}? This cannot be undone.`;
+      }
+      return `Run \`/rm\` to move ${target} to \`/Trash\`? You can restore it from Settings → Trash.`;
+    }
+    case "mv":
+      if (p.mode === "rename") {
+        return `Run \`/mv\` to rename \`${p.srcPath}\` → \`${p.finalPath}\`?`;
+      }
+      if (p.mode === "move") {
+        return `Run \`/mv\` to move \`${p.srcPath}\` into \`${p.finalPath}\`?`;
+      }
+      return `Run \`/mv\` to move + rename \`${p.srcPath}\` → \`${p.finalPath}\`?`;
+  }
+}
+
+/**
+ * Apply a confirmed mutation to the VFS and return a human-readable
+ * outcome string suitable for replacing the assistant's preview
+ * message body. Re-validates the live VFS state — if the world
+ * changed between preview and confirmation (concurrent edit, sync
+ * conflict), returns an error string instead of silently doing the
+ * wrong thing.
+ */
+export function executeConfirmedAction(p: ConfirmationPayload): string {
+  switch (p.kind) {
+    case "write": {
+      const existing = getEntry(p.path);
+      if (existing?.isDir) {
+        return `Aborted: \`${p.path}\` is now a directory (changed since preview).`;
+      }
+      const result = writeFile(p.path, p.content);
+      if (!result) return `Aborted: failed to write \`${p.path}\`.`;
+      const verb = p.existingSize === null ? "Created" : "Overwrote";
+      return `${verb} \`${p.path}\` (${p.content.length} bytes).`;
+    }
+    case "mkdir": {
+      if (getEntry(p.path)) {
+        return `Aborted: \`${p.path}\` already exists (changed since preview).`;
+      }
+      const parent = getEntry(p.parentPath);
+      if (!parent || !parent.isDir) {
+        return `Aborted: parent \`${p.parentPath}\` is no longer a directory.`;
+      }
+      createDir(p.parentPath, p.name);
+      return `Created directory \`${p.path}\`.`;
+    }
+    case "rm": {
+      const entry = getEntry(p.path);
+      if (!entry) return `Aborted: \`${p.path}\` no longer exists.`;
+      if (p.hard) {
+        deleteEntry(p.path);
+        return `Permanently deleted \`${p.path}\`.`;
+      }
+      const trashed = moveToTrash(p.path);
+      if (!trashed) return `Aborted: failed to move \`${p.path}\` to /Trash.`;
+      return `Moved \`${p.path}\` to \`${trashed.entry.path}\`. Restore from Settings → Trash if needed.`;
+    }
+    case "mv": {
+      const src = getEntry(p.srcPath);
+      if (!src) return `Aborted: \`${p.srcPath}\` no longer exists.`;
+      if (getEntry(p.finalPath)) {
+        return `Aborted: \`${p.finalPath}\` already exists (changed since preview).`;
+      }
+      if (p.mode === "rename") {
+        const lastSlash = p.finalPath.lastIndexOf("/");
+        const newName = p.finalPath.slice(lastSlash + 1);
+        const result = renameEntry(p.srcPath, newName);
+        if (!result) return `Aborted: rename of \`${p.srcPath}\` failed.`;
+        return `Renamed \`${p.srcPath}\` → \`${p.finalPath}\`.`;
+      }
+      // For "move" and "move+rename", first move into the destination
+      // parent directory, then (if needed) rename to the requested name.
+      const lastSlash = p.finalPath.lastIndexOf("/");
+      const destDirPath = lastSlash === 0 ? "/" : p.finalPath.slice(0, lastSlash);
+      const intendedName = p.finalPath.slice(lastSlash + 1);
+      const moved = moveEntry(p.srcPath, destDirPath);
+      if (!moved) return `Aborted: move of \`${p.srcPath}\` into \`${destDirPath}\` failed.`;
+      if (moved.name !== intendedName) {
+        const renamed = renameEntry(moved.path, intendedName);
+        if (!renamed) {
+          return `Moved \`${p.srcPath}\` to \`${moved.path}\` but rename to \`${intendedName}\` failed.`;
+        }
+        return `Moved + renamed \`${p.srcPath}\` → \`${p.finalPath}\`.`;
+      }
+      return `Moved \`${p.srcPath}\` → \`${p.finalPath}\`.`;
+    }
+  }
+}
+
+export interface SlashCommandOptions {
+  /**
+   * When true, dangerous commands run immediately instead of returning
+   * a `ConfirmationPayload`. Sourced from the user's
+   * "Always allow dangerous commands" setting.
+   */
+  alwaysAllow?: boolean;
+}
+
+/**
  * If `text` starts with a recognised slash command, execute it and
  * return the synthesised assistant reply. Otherwise returns
  * `{ handled: false, reply: "" }` and the caller should proceed with
  * the configured LLM provider.
+ *
+ * For dangerous commands (`/write`, `/mkdir`, `/rm`, `/mv`), the
+ * default is to return a `ConfirmationPayload` on `ToolResult` so the
+ * UI can render Run / Cancel — the mutation does NOT happen until the
+ * caller explicitly invokes `executeConfirmedAction(payload)`. Pass
+ * `{ alwaysAllow: true }` to skip that gate.
  */
-export async function tryExecuteSlashCommand(text: string): Promise<ToolResult> {
+export async function tryExecuteSlashCommand(
+  text: string,
+  opts: SlashCommandOptions = {},
+): Promise<ToolResult> {
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) return { handled: false, reply: "" };
   const space = trimmed.indexOf(" ");
@@ -336,8 +668,22 @@ export async function tryExecuteSlashCommand(text: string): Promise<ToolResult> 
     };
   }
   try {
-    const reply = await cmd.run(args);
-    return { handled: true, reply };
+    const result = await cmd.run(args);
+    if (typeof result === "string") {
+      return { handled: true, reply: result };
+    }
+    // Command returned a ConfirmationPayload describing a queued
+    // mutation. If the caller opted into always-allow, run it now;
+    // otherwise hand it back so the UI can render Run / Cancel.
+    if (opts.alwaysAllow) {
+      const outcome = executeConfirmedAction(result);
+      return { handled: true, reply: outcome };
+    }
+    return {
+      handled: true,
+      reply: describeConfirmation(result),
+      confirmation: result,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { handled: true, reply: `Command \`/${cmdName}\` failed: ${msg}` };
@@ -345,10 +691,16 @@ export async function tryExecuteSlashCommand(text: string): Promise<ToolResult> 
 }
 
 /** Exposed for tests / inspection. */
-export function listSlashCommands(): { name: string; usage: string; description: string }[] {
+export function listSlashCommands(): {
+  name: string;
+  usage: string;
+  description: string;
+  dangerous: boolean;
+}[] {
   return Object.entries(commands).map(([name, c]) => ({
     name,
     usage: c.usage,
     description: c.description,
+    dangerous: c.dangerous === true,
   }));
 }

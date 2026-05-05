@@ -1,5 +1,6 @@
 import { Component, For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import {
+  cancelPendingConfirmation,
   config,
   conversations,
   currentConversationId,
@@ -7,6 +8,7 @@ import {
   newConversation,
   pending,
   renameConversation,
+  runPendingConfirmation,
   selectConversation,
   sendMessage,
   setConfig,
@@ -195,6 +197,14 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                     <br />
                     <code>/clock</code> · <code>/conflicts</code>
                   </div>
+                  <p class="text-[11px] mt-3">
+                    Mutating commands (confirm before run):
+                  </p>
+                  <div class="text-[10px] mt-1 font-mono leading-relaxed">
+                    ⚠️ <code>/write /path content</code> · <code>/mkdir /path</code>
+                    <br />
+                    ⚠️ <code>/rm [--hard] /path</code> · <code>/mv /src /dst</code>
+                  </div>
                 </div>
               }
             >
@@ -216,13 +226,42 @@ const AIAssistant: Component<{ windowId: string }> = () => {
                       {m.role === "user" ? "🙂" : "🤖"}
                     </div>
                     <div
-                      class="max-w-[80%] rounded-lg px-3 py-2 whitespace-pre-wrap break-words"
+                      class="max-w-[80%] rounded-lg px-3 py-2 whitespace-pre-wrap break-words flex flex-col gap-2"
                       classList={{
                         "bg-os-accent text-white": m.role === "user",
                         "bg-os-surface border border-os-border": m.role === "assistant",
                       }}
                     >
-                      {m.content}
+                      <span>{m.content}</span>
+                      <Show when={m.pendingConfirmation}>
+                        <div class="flex flex-col gap-1.5 pt-1.5 border-t border-os-border/60">
+                          <span class="text-[10px] text-amber-400">
+                            ⚠️ This action mutates your VFS.
+                          </span>
+                          <div class="flex gap-2">
+                            <button
+                              type="button"
+                              class="px-3 py-1 rounded text-[11px] bg-os-danger text-white hover:opacity-90 transition-opacity"
+                              onClick={() => {
+                                const convId = currentConversationId();
+                                if (convId) runPendingConfirmation(convId, m.id);
+                              }}
+                            >
+                              Run
+                            </button>
+                            <button
+                              type="button"
+                              class="px-3 py-1 rounded text-[11px] bg-os-surface border border-os-border hover:bg-os-surface-hover transition-colors"
+                              onClick={() => {
+                                const convId = currentConversationId();
+                                if (convId) cancelPendingConfirmation(convId, m.id);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
                     </div>
                   </div>
                 )}
@@ -512,6 +551,24 @@ const SettingsPanel: Component = () => {
           rows={4}
           class="w-full px-3 py-1.5 rounded bg-os-surface border border-os-border focus:outline-none focus:border-os-accent resize-y"
         />
+      </label>
+
+      <h2 class="text-sm font-semibold pt-2">Dangerous commands</h2>
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={cfg().dangerousAlwaysAllow}
+          onChange={(e) => setConfig({ dangerousAlwaysAllow: e.currentTarget.checked })}
+        />
+        <span class="text-[11px]">
+          <span class="block text-os-text">Always allow dangerous commands</span>
+          <span class="block text-os-text-muted mt-0.5">
+            When off (default), <code>/write</code>, <code>/mkdir</code>, <code>/rm</code>, and
+            <code>/mv</code> show a Run / Cancel button in chat and wait for confirmation. When
+            on, they mutate the VFS immediately — convenient for power users, easy to misfire.
+          </span>
+        </span>
       </label>
 
       <p class="text-[10px] text-os-text-muted">
