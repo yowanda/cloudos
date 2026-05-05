@@ -1,0 +1,58 @@
+# CloudOS reverse-proxy via Caddy
+# ────────────────────────────────────────────────────────────────────────
+# Usage (production):
+#   1. Replace `cloudos.example.com` with your real domain.
+#   2. Place this file at /etc/caddy/Caddyfile (or pass with caddy run --config).
+#   3. Caddy auto-provisions Let's Encrypt certs on first run; no other TLS setup needed.
+#
+# Usage (local dev with HTTPS via mkcert):
+#   caddy run --config deploy/Caddyfile.dev
+#
+# Topology:
+#   /                → cloudos-desktop (static built bundle, port 4100)
+#   /api/*           → cloudos-server (Go, port 3000)
+#   /minio/*         → MinIO console (optional admin path; remove in production)
+
+cloudos.example.com {
+	encode zstd gzip
+
+	# CORS preflight for /api
+	@cors_preflight {
+		method OPTIONS
+		path /api/*
+	}
+	respond @cors_preflight 204
+
+	# Frontend SPA — single-page bundle
+	handle {
+		root * /srv/cloudos/desktop
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Backend API
+	handle /api/* {
+		reverse_proxy cloudos-server:3000
+	}
+
+	# Optional: MinIO admin console (DELETE this block for production)
+	# handle /minio/* {
+	# 	reverse_proxy minio:9001
+	# }
+
+	header {
+		# Security headers
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+	}
+
+	log {
+		output file /var/log/caddy/cloudos.log {
+			roll_size 10MiB
+			roll_keep 7
+		}
+	}
+}

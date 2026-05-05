@@ -81,6 +81,12 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4100}
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # CloudOS Frontend (SolidJS)
   frontend:
@@ -89,9 +95,15 @@ services:
       dockerfile: apps/desktop/Dockerfile
     restart: unless-stopped
     depends_on:
-      - server
+      server:
+        condition: service_started
     ports:
       - "4100:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:

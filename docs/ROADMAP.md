@@ -138,6 +138,14 @@
   - [x] Optional Meilisearch integration (`searchMeili`, config in localStorage)
   - [x] Full-text file search via Spotlight overlay
   - [x] Search UI in taskbar (button + Ctrl+K / Ctrl+Space shortcut)
+- [x] CI/CD & Deployment
+  - [x] GitHub Actions: build frontend + backend on every PR
+  - [x] Release workflow: tag-triggered, publishes Docker images to GHCR
+  - [x] Liveness `/health` + readiness `/ready` endpoints (DB + S3 checks)
+  - [x] Docker compose healthchecks (postgres, server, frontend)
+  - [x] Caddy reverse-proxy templates (production + local TLS)
+  - [x] Backup script (`deploy/backup.sh`: pg_dump + mc mirror + VFS, retention)
+
 - [x] Storage management
   - [x] Usage dashboard (Settings → Storage: per-folder breakdown, file/folder counts)
   - [x] Trash / recycle bin (move to trash, restore, permanent delete, empty trash, persisted)

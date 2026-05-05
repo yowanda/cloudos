@@ -57,12 +57,43 @@ func main() {
 		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 	}))
 
-	// Health check
+	// Health checks
+	// /health: liveness — always 200 OK if the process is up
+	// /ready : readiness — checks downstream deps (Postgres, S3)
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":  "ok",
 			"service": "cloudos-server",
 			"version": "0.1.0",
+		})
+	})
+	app.Get("/ready", func(c *fiber.Ctx) error {
+		dbOK := true
+		dbErr := ""
+		if sqlDB, err := database.DB.DB(); err != nil {
+			dbOK = false
+			dbErr = err.Error()
+		} else if err := sqlDB.PingContext(c.Context()); err != nil {
+			dbOK = false
+			dbErr = err.Error()
+		}
+		s3OK := true
+		s3Err := ""
+		if err := fileService.EnsureBucket(c.Context()); err != nil {
+			s3OK = false
+			s3Err = err.Error()
+		}
+		ready := dbOK && s3OK
+		status := 200
+		if !ready {
+			status = 503
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"ready": ready,
+			"checks": fiber.Map{
+				"database": fiber.Map{"ok": dbOK, "error": dbErr},
+				"s3":       fiber.Map{"ok": s3OK, "error": s3Err},
+			},
 		})
 	})
 

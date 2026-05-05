@@ -39,6 +39,13 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### Deployment & Ops
+- **CI** (`.github/workflows/ci.yml`) builds the frontend + Go backend on every PR; on `main` it also builds both Docker images.
+- **Release** (`.github/workflows/release.yml`) on `v*.*.*` tags publishes images to `ghcr.io/<owner>/cloudos-{server,desktop}` and creates a GitHub Release with auto-generated changelog.
+- **Health endpoints**: `/health` (liveness) and `/ready` (readiness — pings Postgres + S3); wired into docker-compose healthchecks.
+- **Reverse proxy**: ready-to-deploy Caddyfiles in [`deploy/`](./deploy/) — production (auto-TLS via Let's Encrypt) and local-HTTPS variants.
+- **Backup**: [`deploy/backup.sh`](./deploy/backup.sh) snapshots Postgres + MinIO bucket + VFS data into a single zstd-compressed archive with configurable retention.
+
 ### Search (Spotlight)
 - **Ctrl+K** (or **Ctrl+Space**, or the magnifier in the taskbar) opens a Spotlight-style overlay.
 - Searches **apps + manifests + files (name & content)** with arrow-key navigation, ranked by exact/prefix/token/contains scoring.

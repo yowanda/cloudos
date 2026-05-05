@@ -1,0 +1,19 @@
+# Local-development Caddyfile — terminates HTTPS at localhost using a
+# self-signed cert (ideal for testing OPFS / SubtleCrypto / clipboard APIs that
+# require secure context). Pair with `mkcert -install`.
+
+localhost {
+	tls internal
+
+	@api {
+		path /api/*
+	}
+
+	handle @api {
+		reverse_proxy localhost:3000
+	}
+
+	handle {
+		reverse_proxy localhost:4100
+	}
+}
