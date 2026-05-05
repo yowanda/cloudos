@@ -128,7 +128,7 @@ CloudOS ships a service worker (`apps/desktop/public/sw.js`) and Web App Manifes
 The VFS supports three pluggable backends (Settings → Backend):
 - **In-memory** (default) — fast, data lives in the tab.
 - **OPFS** — browser-native Origin Private File System, persists across reloads even when localStorage is cleared.
-- **Remote** — pushes a JSON snapshot to a CloudOS API server (`/api/v1/vfs/snapshot`), pulls on boot, debounced auto-save on every mutation.
+- **Remote** — pushes a JSON snapshot to a CloudOS API server (`/api/v1/vfs/snapshot`), pulls on boot, debounced auto-save on every mutation. The server also exposes `POST /api/v1/vfs/changes` for **incremental delta sync** (stage 2 of the diff-sync feature) — the client sends `{ since, entries, tombstones }` for paths that mutated since its last watermark and receives the inverse delta back. Conflict resolution is last-write-wins by per-entry logical clock; tombstones are persisted server-side so deletions propagate to other devices.
 
 ### Cloud & Backend
 - **Go + Fiber** REST API backend

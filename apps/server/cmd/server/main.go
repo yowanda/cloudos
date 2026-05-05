@@ -125,6 +125,10 @@ func main() {
 	protected.Get("/vfs/snapshot", vfsHandler.GetSnapshot)
 	protected.Put("/vfs/snapshot", vfsHandler.PutSnapshot)
 	protected.Delete("/vfs/snapshot", vfsHandler.DeleteSnapshot)
+	// Stage 2 of per-entry diff sync — delta push/pull keyed on the
+	// monotonic logical clock the client maintains in localStorage. See
+	// VFSHandler.ApplyChanges for the merge semantics.
+	protected.Post("/vfs/changes", vfsHandler.ApplyChanges)
 
 	// File sharing
 	api.Get("/shares/by-token/:token", shareHandler.GetByToken)
