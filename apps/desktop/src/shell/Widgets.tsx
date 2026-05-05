@@ -1,4 +1,5 @@
 import { Component, For, createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { isMobile } from "../stores/viewport-store";
 
 interface Widget {
   id: string;
@@ -104,23 +105,28 @@ const availableWidgets: Widget[] = [
 export const DesktopWidgets: Component = () => {
   const [activeWidgets, setActiveWidgets] = createSignal(["clock", "weather", "system"]);
 
+  // Widgets are hidden on mobile — they sit fixed-position next to
+  // window content where on a 360 px viewport they'd cover the entire
+  // app surface.
   return (
-    <div class="absolute top-12 right-3 z-[5] flex flex-col gap-2 pointer-events-auto">
-      <For each={activeWidgets()}>
-        {(widgetId) => {
-          const widget = availableWidgets.find((w) => w.id === widgetId);
-          if (!widget) return null;
-          return (
-            <div
-              class="rounded-2xl bg-os-window/80 backdrop-blur-xl border border-os-border/50 p-3 shadow-lg"
-              style={{ width: `${widget.width}px`, height: `${widget.height}px` }}
-            >
-              <widget.component />
-            </div>
-          );
-        }}
-      </For>
-    </div>
+    <Show when={!isMobile()}>
+      <div class="absolute top-12 right-3 z-[5] flex flex-col gap-2 pointer-events-auto">
+        <For each={activeWidgets()}>
+          {(widgetId) => {
+            const widget = availableWidgets.find((w) => w.id === widgetId);
+            if (!widget) return null;
+            return (
+              <div
+                class="rounded-2xl bg-os-window/80 backdrop-blur-xl border border-os-border/50 p-3 shadow-lg"
+                style={{ width: `${widget.width}px`, height: `${widget.height}px` }}
+              >
+                <widget.component />
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    </Show>
   );
 };
 

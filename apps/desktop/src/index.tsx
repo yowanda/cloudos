@@ -1,10 +1,16 @@
 import { render } from "solid-js/web";
 import App from "./App";
 import "./index.css";
+import { installViewportListener } from "./stores/viewport-store";
 
 const root = document.getElementById("root");
 
 if (!root) throw new Error("Root element not found");
+
+// Wire up the viewport store before the first render so initial
+// layout decisions (e.g. mobile-vs-desktop window chrome) match the
+// device on first paint.
+installViewportListener();
 
 render(() => <App />, root);
 

@@ -6,6 +6,7 @@ import { hideContextMenu } from "../stores/contextmenu-store";
 import { toggleNotificationCenter, unreadCount } from "../stores/notification-store";
 import { WorkspaceTrayButton } from "./WorkspaceSwitcher";
 import { conflictCount } from "../vfs/conflicts";
+import { isMobile } from "../stores/viewport-store";
 
 const Clock: Component = () => {
   const [time, setTime] = createSignal("");
@@ -26,7 +27,9 @@ const Clock: Component = () => {
   return (
     <div class="flex flex-col items-end text-xs leading-tight">
       <span class="text-os-text font-medium">{time()}</span>
-      <span class="text-os-text-muted text-[10px]">{date()}</span>
+      <Show when={!isMobile()}>
+        <span class="text-os-text-muted text-[10px]">{date()}</span>
+      </Show>
     </div>
   );
 };
@@ -53,14 +56,17 @@ const Taskbar: Component = () => {
 
   return (
     <div class="absolute top-0 left-0 right-0 h-9 z-[9999] flex items-center px-2 gap-1 bg-os-taskbar backdrop-blur-xl border-b border-os-border">
-      {/* Start Button */}
+      {/* Start Button — text label collapses to icon-only on mobile */}
       <button
-        class="flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-semibold transition-colors"
+        class="flex items-center gap-1.5 h-7 rounded-md text-xs font-semibold transition-colors"
         classList={{
           "bg-os-accent text-white": startMenuOpen(),
           "text-os-text hover:bg-os-surface-hover": !startMenuOpen(),
+          "px-3": !isMobile(),
+          "px-2": isMobile(),
         }}
         onClick={handleStartClick}
+        aria-label="Apps menu"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
           <rect x="1" y="1" width="6" height="6" rx="1" />
@@ -68,13 +74,16 @@ const Taskbar: Component = () => {
           <rect x="1" y="9" width="6" height="6" rx="1" />
           <rect x="9" y="9" width="6" height="6" rx="1" />
         </svg>
-        <span>Apps</span>
+        <Show when={!isMobile()}>
+          <span>Apps</span>
+        </Show>
       </button>
 
       <button
         class="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs text-os-text-muted hover:bg-os-surface-hover transition-colors"
         title="Spotlight (Ctrl+K)"
         onClick={() => openSpotlight()}
+        aria-label="Search"
       >
         <span>🔍</span>
         <span class="hidden md:inline">Search</span>
@@ -85,37 +94,47 @@ const Taskbar: Component = () => {
 
       <div class="w-px h-5 bg-os-border mx-1" />
 
-      {/* Running Windows (current workspace only) */}
+      {/* Running Windows (current workspace only). On mobile we drop
+          the per-window text label (icons stay tappable) since the
+          taskbar would otherwise overflow on a 360 px viewport. */}
       <div class="flex-1 flex items-center gap-0.5 overflow-x-auto">
         <For each={currentDesktopWindows()}>
           {(win) => (
             <button
-              class="flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs transition-colors max-w-[180px] truncate"
+              class="flex items-center gap-1.5 h-7 rounded-md text-xs transition-colors truncate"
               classList={{
                 "bg-os-accent/20 text-os-accent-hover border border-os-accent/30": win.focused,
                 "text-os-text-muted hover:bg-os-surface-hover": !win.focused,
                 "opacity-50": win.state === "minimized",
+                "px-2.5 max-w-[180px]": !isMobile(),
+                "px-2": isMobile(),
               }}
               onClick={() => handleTaskClick(win.id, win.state)}
               title={win.title}
+              aria-label={win.title}
             >
               <span class="text-sm">{win.icon}</span>
-              <span class="truncate">{win.title}</span>
+              <Show when={!isMobile()}>
+                <span class="truncate">{win.title}</span>
+              </Show>
             </button>
           )}
         </For>
       </div>
 
-      {/* System Tray */}
+      {/* System Tray. Wi-Fi / Volume placeholders + the workspace
+          switcher button are hidden on mobile to free pixel budget. */}
       <div class="flex items-center gap-2">
-        <WorkspaceTrayButton />
-        <div class="w-px h-5 bg-os-border" />
-        <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Wi-Fi">
-          📶
-        </button>
-        <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Volume">
-          🔊
-        </button>
+        <Show when={!isMobile()}>
+          <WorkspaceTrayButton />
+          <div class="w-px h-5 bg-os-border" />
+          <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Wi-Fi">
+            📶
+          </button>
+          <button class="text-os-text-muted hover:text-os-text text-sm transition-colors" title="Volume">
+            🔊
+          </button>
+        </Show>
         <Show when={conflictCount() > 0}>
           <button
             class="relative text-os-warning hover:brightness-110 text-sm transition-colors"

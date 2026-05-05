@@ -1,8 +1,9 @@
-import { Component, For } from "solid-js";
+import { Component, For, Show } from "solid-js";
 import { openWindow, currentDesktopWindows, focusWindow } from "../stores/window-store";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
 import { recordRecent } from "../stores/recents-store";
+import { isMobile } from "../stores/viewport-store";
 
 interface DockItem {
   id: string;
@@ -45,8 +46,12 @@ const Dock: Component = () => {
 
   const isRunning = (appId: string) => currentDesktopWindows().some((w) => w.appId === appId);
 
+  // Hide the floating dock on mobile — at < 640 px it overlaps the
+  // window content and the Start Menu / taskbar already cover its
+  // launch role with bigger tap targets.
   return (
-    <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-[9998] flex items-end gap-1 px-3 py-1.5 rounded-2xl bg-os-dock backdrop-blur-xl border border-os-border">
+    <Show when={!isMobile()}>
+      <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-[9998] flex items-end gap-1 px-3 py-1.5 rounded-2xl bg-os-dock backdrop-blur-xl border border-os-border">
       <For each={defaultDockItems}>
         {(item) => (
           <button
@@ -65,7 +70,8 @@ const Dock: Component = () => {
           </button>
         )}
       </For>
-    </div>
+      </div>
+    </Show>
   );
 };
 

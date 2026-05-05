@@ -6,10 +6,16 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#6366f1",
+  "lang": "en",
+  "dir": "ltr",
   "categories": ["productivity", "utilities"],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "icons": [
     {
       "src": "/icon.svg",
@@ -22,6 +28,29 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Files",
+      "short_name": "Files",
+      "description": "Open the file manager",
+      "url": "/?launch=com.cloudos.files",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Terminal",
+      "short_name": "Terminal",
+      "description": "Open a terminal session",
+      "url": "/?launch=com.cloudos.terminal",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Configure CloudOS",
+      "url": "/?launch=com.cloudos.settings",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
     }
   ]
 }

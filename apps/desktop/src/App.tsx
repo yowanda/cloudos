@@ -31,6 +31,7 @@ import { attachAudioUnlock } from "./core/sound-manager";
 import { initVfsSync } from "./vfs/sync";
 import SharedFileViewer from "./shell/SharedFileViewer";
 import { Spotlight, openSpotlight } from "./shell/Spotlight";
+import InstallPrompt from "./shell/InstallPrompt";
 
 const App: Component = () => {
   const [booted, setBooted] = createSignal(false);
@@ -194,6 +195,25 @@ const App: Component = () => {
     initShortcuts();
   });
 
+  // Honour ?launch=<appId> on first boot so PWA "App shortcuts" (the
+  // jump list / launcher contexts populated by manifest.shortcuts) can
+  // open a specific app from the home screen.
+  const launchFromQuery = () => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const appId = params.get("launch");
+    if (!appId) return;
+    const titleByApp: Record<string, { title: string; icon: string }> = {
+      "com.cloudos.files": { title: "Files", icon: "📁" },
+      "com.cloudos.terminal": { title: "Terminal", icon: "⬛" },
+      "com.cloudos.settings": { title: "Settings", icon: "⚙️" },
+    };
+    const info = titleByApp[appId] ?? { title: appId, icon: "📦" };
+    import("./stores/window-store").then(({ openWindow }) => {
+      openWindow({ appId, title: info.title, icon: info.icon });
+    });
+  };
+
   const handleBootComplete = () => {
     setBooted(true);
     setTimeout(() => {
@@ -203,6 +223,7 @@ const App: Component = () => {
         type: "info",
         icon: "☁️",
       });
+      launchFromQuery();
     }, 500);
   };
 
@@ -226,6 +247,7 @@ const App: Component = () => {
         <LockScreen />
         <Spotlight />
         <PermissionPrompt />
+        <InstallPrompt />
         <Show when={shareToken()}>
           {(t) => (
             <SharedFileViewer

@@ -29,7 +29,7 @@
  * the old cache during `activate`, so users get the new shell on the
  * next reload after install.
  */
-const CACHE_VERSION = "cloudos-shell-v1";
+const CACHE_VERSION = "cloudos-shell-v2";
 const SHELL_URLS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

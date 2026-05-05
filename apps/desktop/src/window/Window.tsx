@@ -17,6 +17,7 @@ import {
 import { hideContextMenu, showContextMenu, type MenuItem } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
 import { desktops, currentDesktopId, switchDesktop } from "../stores/desktop-store";
+import { isMobile } from "../stores/viewport-store";
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -115,19 +116,38 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
     { dir: "sw", class: "bottom-0 left-0 w-3 h-3", cursor: "nesw-resize" },
   ];
 
+  // On mobile we collapse multi-window chrome into a single full-bleed
+  // surface — overlapping draggable windows are unusable at < 640 px
+  // so we ignore the saved bounds and snap the focused window to the
+  // viewport (minus the 36 px taskbar). The user still gets the full
+  // app inside, just without title bar drag / corner resize handles.
+  const mobileLayout = () => isMobile();
+  const positionStyle = () =>
+    mobileLayout()
+      ? {
+          left: "0px",
+          top: "36px",
+          width: "100vw",
+          height: "calc(100vh - 36px)",
+        }
+      : {
+          left: `${props.config.bounds.x}px`,
+          top: `${props.config.bounds.y}px`,
+          width: `${props.config.bounds.width}px`,
+          height: `${props.config.bounds.height}px`,
+        };
+
   return (
     <div
-      class="absolute rounded-xl overflow-hidden shadow-2xl transition-shadow"
+      class="absolute overflow-hidden shadow-2xl transition-shadow"
       classList={{
+        "rounded-xl": !mobileLayout(),
         "ring-1 ring-os-accent/50 shadow-os-accent/10": props.config.focused,
         "ring-1 ring-os-border": !props.config.focused,
         hidden: props.config.state === "minimized",
       }}
       style={{
-        left: `${props.config.bounds.x}px`,
-        top: `${props.config.bounds.y}px`,
-        width: `${props.config.bounds.width}px`,
-        height: `${props.config.bounds.height}px`,
+        ...positionStyle(),
         "z-index": props.config.zIndex,
       }}
       onMouseDown={handleMouseDown}
@@ -136,8 +156,8 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
       <div
         ref={headerRef}
         class="flex items-center h-8 px-3 gap-2 bg-os-window-title border-b border-os-border select-none"
-        onMouseDown={handleDragStart}
-        onDblClick={() => maximizeWindow(props.config.id)}
+        onMouseDown={mobileLayout() ? undefined : handleDragStart}
+        onDblClick={mobileLayout() ? undefined : () => maximizeWindow(props.config.id)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -228,8 +248,8 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
         })()}
       </div>
 
-      {/* Resize Handles */}
-      <Show when={props.config.resizable && props.config.state === "normal"}>
+      {/* Resize Handles — hidden on mobile where the window fills the viewport. */}
+      <Show when={!mobileLayout() && props.config.resizable && props.config.state === "normal"}>
         {resizeHandles.map((h) => (
           <div
             class={`absolute ${h.class} z-10`}
