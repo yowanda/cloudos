@@ -123,7 +123,7 @@
 - [x] MinIO integration
   - [x] S3-compatible object storage setup
   - [x] File upload/download via presigned URLs
-  - [ ] Storage quota enforcement
+  - [x] **Storage quota enforcement** — `vfs.ts` exports `getQuotaBytes()`, `setQuotaBytes()`, `usedBytes()`, and a `VFSQuotaExceededError` class. `createFile` / `writeFile` call `enforceQuota(delta)` on the byte delta and throw the error instead of silently writing past the cap. Settings → Storage exposes 1/2/5/10/20/50 GB presets and refuses to drop below current usage. Trash counts towards the cap.
 - [x] File API
   - [x] List directory, create directory
   - [x] Upload file, download (presigned URL)

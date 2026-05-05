@@ -20,7 +20,7 @@
 - **Keyboard Shortcuts** — Alt+Tab (window switcher), Ctrl+D (show desktop), Ctrl+L (lock screen), Ctrl+Alt+→/← (next/prev workspace), Ctrl+Alt+1..9 (jump to workspace) — fully remappable from the **Shortcuts** app (record-key UI, conflict detection, reset to default)
 - **Lock Screen** — Login/register form, session restore, clock display
 - **Trash / Recycle Bin** — Soft delete with restore, permanent delete, empty trash; persisted across reloads
-- **Storage Dashboard** — Per-folder usage breakdown, quota gauge with warnings, file/folder/trash counts in Settings → Storage
+- **Storage Dashboard** — Per-folder usage breakdown, quota gauge with warnings, file/folder/trash counts in Settings → Storage. **Quota is enforced** — `writeFile` / `createFile` throw `VFSQuotaExceededError` when a write would exceed the cap (configurable 1/2/5/10/20/50 GB; trash counts towards the cap). TextEditor save and FileManager drag-import surface the error as a user-friendly notification instead of silently dropping bytes.
 
 ### System Apps
 | App | Description |

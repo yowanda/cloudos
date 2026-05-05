@@ -1,5 +1,5 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
-import { writeFile } from "../vfs/vfs";
+import { writeFile, VFSQuotaExceededError, formatSize } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
 import { detectLanguage, languageLabel, tokenize, tokenClass, type Language } from "../core/syntax";
 
@@ -110,7 +110,21 @@ const TextEditor: Component<{ windowId: string }> = () => {
     }
     const segs = path.split("/").filter(Boolean);
     const fileName = segs[segs.length - 1] ?? t.name;
-    const entry = writeFile(path, t.content);
+    let entry;
+    try {
+      entry = writeFile(path, t.content);
+    } catch (e: unknown) {
+      if (e instanceof VFSQuotaExceededError) {
+        notify({
+          title: "Storage quota exceeded",
+          message: `Need ${formatSize(e.attemptedDelta)}, only ${formatSize(e.quotaBytes - e.usedBytes)} free. Raise quota or empty trash.`,
+          type: "error",
+          icon: "💾",
+        });
+        return;
+      }
+      throw e;
+    }
     if (!entry) {
       notify({ title: "Save failed", message: `Cannot save to ${path}`, type: "error", icon: "💾" });
       return;

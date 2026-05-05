@@ -13,7 +13,16 @@ import {
   removeCustomTheme,
 } from "../stores/theme-store";
 import type { CloudOSTheme } from "../theme/types";
-import { vfsStats, formatSize, emptyTrash, subscribeTrash, type VFSStats } from "../vfs/vfs";
+import {
+  vfsStats,
+  formatSize,
+  emptyTrash,
+  subscribeTrash,
+  getQuotaBytes,
+  setQuotaBytes,
+  subscribeFs,
+  type VFSStats,
+} from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
 import { profile, updateProfile, resetProfile } from "../stores/profile-store";
 import { recentApps, clearRecents } from "../stores/recents-store";
@@ -52,7 +61,14 @@ type SettingsPage =
   | "backend"
   | "about";
 
-const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB demo quota
+const QUOTA_PRESETS_BYTES = [
+  { label: "1 GB", bytes: 1 * 1024 * 1024 * 1024 },
+  { label: "2 GB", bytes: 2 * 1024 * 1024 * 1024 },
+  { label: "5 GB", bytes: 5 * 1024 * 1024 * 1024 },
+  { label: "10 GB", bytes: 10 * 1024 * 1024 * 1024 },
+  { label: "20 GB", bytes: 20 * 1024 * 1024 * 1024 },
+  { label: "50 GB", bytes: 50 * 1024 * 1024 * 1024 },
+];
 
 const accentColors = [
   { name: "Indigo", value: "#6366f1" },
@@ -213,8 +229,12 @@ const ThemeImportExport: Component = () => {
 const Settings: Component<{ windowId: string }> = () => {
   const [page, setPage] = createSignal<SettingsPage>("appearance");
   const [stats, setStats] = createSignal<VFSStats>(vfsStats());
+  const [quota, setQuotaSignal] = createSignal<number>(getQuotaBytes());
 
-  const refreshStats = () => setStats(vfsStats());
+  const refreshStats = () => {
+    setStats(vfsStats());
+    setQuotaSignal(getQuotaBytes());
+  };
 
   onMount(() => {
     refreshStats();
@@ -222,8 +242,12 @@ const Settings: Component<{ windowId: string }> = () => {
     // Settings window opened, pick it up now.
     const initialJump = consumePendingSettingsPage();
     if (initialJump) setPage(initialJump);
-    const unsub = subscribeTrash(refreshStats);
-    onCleanup(unsub);
+    const unsubTrash = subscribeTrash(refreshStats);
+    const unsubFs = subscribeFs(refreshStats);
+    onCleanup(() => {
+      unsubTrash();
+      unsubFs();
+    });
   });
 
   // Existing Settings windows also listen for jumps so that "Jump to
@@ -264,7 +288,27 @@ const Settings: Component<{ windowId: string }> = () => {
   ];
 
   const usedBytes = () => stats().totalBytes + stats().trashBytes;
-  const usedPct = () => Math.min(100, (usedBytes() / STORAGE_QUOTA_BYTES) * 100);
+  const usedPct = () => Math.min(100, (usedBytes() / quota()) * 100);
+
+  const handleQuotaChange = (bytes: number) => {
+    if (bytes < usedBytes()) {
+      notify({
+        title: "Quota too small",
+        message: `Used ${formatSize(usedBytes())}; raise a few GB or empty trash first.`,
+        type: "warning",
+        icon: "\uD83D\uDCBE",
+      });
+      return;
+    }
+    setQuotaBytes(bytes);
+    setQuotaSignal(bytes);
+    notify({
+      title: "Storage quota updated",
+      message: `Now ${formatSize(bytes)}`,
+      type: "success",
+      icon: "\uD83D\uDCBE",
+    });
+  };
 
   return (
     <div class="flex h-full text-xs">
@@ -440,7 +484,7 @@ const Settings: Component<{ windowId: string }> = () => {
             <div class="flex items-end justify-between mb-2">
               <div>
                 <div class="text-os-text">{formatSize(usedBytes())} <span class="text-os-text-muted">used</span></div>
-                <div class="text-[10px] text-os-text-muted">of {formatSize(STORAGE_QUOTA_BYTES)} quota</div>
+                <div class="text-[10px] text-os-text-muted">of {formatSize(quota())} quota</div>
               </div>
               <div class="text-[10px] text-os-text-muted">{usedPct().toFixed(2)}%</div>
             </div>
@@ -460,6 +504,34 @@ const Settings: Component<{ windowId: string }> = () => {
                 You're using a lot of storage. Consider emptying trash or removing unused files.
               </p>
             </Show>
+          </div>
+
+          {/* Quota selector */}
+          <div class="rounded-lg border border-os-border p-3 mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-os-text-muted">Quota</h3>
+              <span class="text-[10px] text-os-text-muted">Hard cap on writes — file create / save / drop</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <For each={QUOTA_PRESETS_BYTES}>
+                {(preset) => (
+                  <button
+                    class="px-2.5 py-1 rounded text-[11px] border transition-colors"
+                    classList={{
+                      "border-os-accent bg-os-accent/10 text-os-accent": quota() === preset.bytes,
+                      "border-os-border hover:border-os-accent/50": quota() !== preset.bytes,
+                    }}
+                    onClick={() => handleQuotaChange(preset.bytes)}
+                    title={`Set quota to ${preset.label}`}
+                  >
+                    {preset.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <p class="text-[10px] text-os-text-muted mt-2 leading-relaxed">
+              When usage would exceed the cap, <code>writeFile</code> / <code>createFile</code> throw <code>VFSQuotaExceededError</code> and the calling app shows a notification instead of silently dropping the bytes. Trash counts towards the quota — empty it to reclaim space.
+            </p>
           </div>
 
           {/* Top folder usage */}

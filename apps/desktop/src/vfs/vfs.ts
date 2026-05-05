@@ -12,6 +12,81 @@ export interface VFSEntry {
 
 const fileSystem: Map<string, VFSEntry> = new Map();
 
+// ───── Quota ─────────────────────────────────────────────────────────
+//
+// Hard cap on combined active + trash bytes. Configured by the user
+// from Settings → Storage. Persisted in localStorage:cloudos:vfs:quota
+// so it survives reloads. createFile() and writeFile() throw a
+// VFSQuotaExceededError if the new bytes would push usage over the cap.
+
+const QUOTA_KEY = "cloudos:vfs:quota";
+const DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
+
+export class VFSQuotaExceededError extends Error {
+  /** How many bytes the operation tried to add. */
+  attemptedDelta: number;
+  /** Bytes currently used (active + trash). */
+  usedBytes: number;
+  /** Configured quota. */
+  quotaBytes: number;
+  constructor(deltaBytes: number, used: number, quota: number) {
+    super(
+      `Storage quota exceeded — adding ${deltaBytes} bytes would push usage to ${used + deltaBytes}/${quota}`,
+    );
+    this.name = "VFSQuotaExceededError";
+    this.attemptedDelta = deltaBytes;
+    this.usedBytes = used;
+    this.quotaBytes = quota;
+  }
+}
+
+let quotaBytes: number = (() => {
+  if (typeof window === "undefined") return DEFAULT_QUOTA_BYTES;
+  try {
+    const raw = window.localStorage.getItem(QUOTA_KEY);
+    if (!raw) return DEFAULT_QUOTA_BYTES;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_QUOTA_BYTES;
+  } catch {
+    return DEFAULT_QUOTA_BYTES;
+  }
+})();
+
+export function getQuotaBytes(): number {
+  return quotaBytes;
+}
+
+export function setQuotaBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return;
+  quotaBytes = Math.floor(bytes);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(QUOTA_KEY, String(quotaBytes));
+    } catch {
+      // ignore
+    }
+  }
+  notifyFs();
+}
+
+/** Active + trash bytes. Trash counts because it still occupies the same VFS space. */
+export function usedBytes(): number {
+  let active = 0;
+  for (const e of fileSystem.values()) if (!e.isDir) active += e.size;
+  let trashed = 0;
+  for (const t of trash.values()) trashed += t.entry.size;
+  return active + trashed;
+}
+
+/** Throws VFSQuotaExceededError if used + delta > quota. delta may be negative. */
+function enforceQuota(deltaBytes: number) {
+  if (deltaBytes <= 0) return; // shrinking or no-op always allowed
+  const used = usedBytes();
+  if (used + deltaBytes > quotaBytes) {
+    throw new VFSQuotaExceededError(deltaBytes, used, quotaBytes);
+  }
+}
+
 export interface TrashEntry {
   entry: VFSEntry;
   originalPath: string;
@@ -166,6 +241,9 @@ export function getEntry(path: string): VFSEntry | undefined {
 
 export function createFile(path: string, name: string, content = ""): VFSEntry {
   const fullPath = path === "/" ? `/${name}` : `${path}/${name}`;
+  // If the file already exists, treat this as a write — only count the delta.
+  const existingSize = fileSystem.get(fullPath)?.size ?? 0;
+  enforceQuota(content.length - existingSize);
   const now = Date.now();
   const entry: VFSEntry = {
     name,
@@ -191,6 +269,7 @@ export function writeFile(fullPath: string, content: string): VFSEntry | undefin
   if (!fullPath.startsWith("/")) fullPath = `/${fullPath}`;
   const existing = fileSystem.get(fullPath);
   if (existing && existing.isDir) return undefined;
+  enforceQuota(content.length - (existing?.size ?? 0));
   const now = Date.now();
   if (existing) {
     existing.content = content;

@@ -13,6 +13,7 @@ import {
   emptyTrash,
   subscribeTrash,
   getEntry,
+  VFSQuotaExceededError,
   type VFSEntry,
   type TrashEntry,
 } from "../vfs/vfs";
@@ -200,7 +201,22 @@ const FileManager: Component<{ windowId: string }> = () => {
     } else {
       showContextMenu(e.clientX, e.clientY, [
         { label: "New Folder", icon: "📁", action: () => { createDir(currentPath(), "New Folder"); refresh(); } },
-        { label: "New File", icon: "📄", action: () => { createFile(currentPath(), "untitled.txt"); refresh(); } },
+        {
+          label: "New File",
+          icon: "📄",
+          action: () => {
+            try {
+              createFile(currentPath(), "untitled.txt");
+              refresh();
+            } catch (err) {
+              if (err instanceof VFSQuotaExceededError) {
+                notify({ title: "Storage quota exceeded", message: "Raise quota in Settings → Storage.", type: "error", icon: "📄" });
+              } else {
+                throw err;
+              }
+            }
+          },
+        },
         { separator: true, label: "" },
         { label: "Refresh", icon: "🔄", action: refresh },
       ]);
@@ -463,8 +479,21 @@ const FileManager: Component<{ windowId: string }> = () => {
                 const file = files[i];
                 const reader = new FileReader();
                 reader.onload = () => {
-                  createFile(currentPath(), file.name, reader.result as string);
-                  refresh();
+                  try {
+                    createFile(currentPath(), file.name, reader.result as string);
+                    refresh();
+                  } catch (err) {
+                    if (err instanceof VFSQuotaExceededError) {
+                      notify({
+                        title: "Storage quota exceeded",
+                        message: `Couldn't import "${file.name}" — needed ${formatSize(err.attemptedDelta)}, only ${formatSize(err.quotaBytes - err.usedBytes)} free.`,
+                        type: "error",
+                        icon: "📥",
+                      });
+                    } else {
+                      throw err;
+                    }
+                  }
                 };
                 // Binary-ish MIME types (images, audio, video, pdfs) need to be
                 // stored as data URLs so the viewer apps can render them; text
