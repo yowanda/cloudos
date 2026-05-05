@@ -146,6 +146,11 @@
 
 **Goal:** Third-party apps, AI, dan polishing.
 
+- [x] Notification system
+  - [x] Toast notifications (slide-in, auto-dismiss)
+  - [x] Notification center (panel overlay)
+  - [x] Notification bell with unread badge
+  - [x] Mark as read / clear all
 - [ ] App manifest system
   - [ ] manifest.json spec
   - [ ] Permission system (fs, clipboard, network, notifications)
@@ -154,9 +159,9 @@
   - [ ] Secure iframe sandbox
   - [ ] postMessage IPC bridge
   - [ ] OS API exposed to apps (window, fs, clipboard, notifications)
-- [ ] App Store
-  - [ ] Browse apps by category
-  - [ ] Install / uninstall
+- [x] App Store
+  - [x] Browse apps by category
+  - [x] Install / uninstall
   - [ ] Ratings & reviews
   - [ ] Developer portal (submit apps)
 - [ ] AI Assistant
@@ -164,9 +169,10 @@
   - [ ] LLM API integration (OpenAI/Anthropic/local)
   - [ ] Context-aware (can read files, run commands)
   - [ ] Prompt templates
-- [ ] Media Player
+- [x] Media Player
   - [ ] Video player (video.js)
-  - [ ] Audio player with visualizer
+  - [x] Audio player with track list
+  - [x] Playback controls + volume
   - [ ] Playlist support
 - [ ] Advanced features
   - [ ] Multi-desktop workspace UI
@@ -180,15 +186,15 @@
 
 ## Infrastructure & DevOps
 
-- [ ] Docker Compose (dev environment)
-  - [ ] Frontend container
-  - [ ] Backend container
-  - [ ] PostgreSQL
-  - [ ] Redis
-  - [ ] MinIO
-  - [ ] Meilisearch
-- [ ] Production deploy
-  - [ ] Dockerfile (multi-stage build)
+- [x] Docker Compose (dev environment)
+  - [x] Frontend container (Nginx + SolidJS)
+  - [x] Backend container (Go + Fiber)
+  - [x] PostgreSQL
+  - [x] Redis
+  - [x] MinIO
+  - [x] Meilisearch
+- [x] Production deploy
+  - [x] Dockerfile (multi-stage build)
   - [ ] Caddy reverse proxy (auto-SSL)
   - [ ] Backup scripts
   - [ ] Health checks
