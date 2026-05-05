@@ -1,0 +1,16 @@
+{
+  "name": "@cloudos/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "biome check src/",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.7.0"
+  }
+}

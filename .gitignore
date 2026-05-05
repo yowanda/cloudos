@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.turbo/
+.vite/
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
