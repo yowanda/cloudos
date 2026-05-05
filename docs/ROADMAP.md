@@ -27,7 +27,7 @@
 - [x] Start Menu / App Launcher
   - [x] App grid
   - [x] Search/filter
-  - [ ] Recent apps
+  - [x] Recent apps (Start menu surfaces last 6 launches; recorded from Start menu, Dock, and elsewhere)
 - [x] Context Menu system (right-click)
   - [x] Desktop context menu
   - [x] Custom per-component menus
@@ -81,10 +81,10 @@
 - [x] Settings App
   - [x] Appearance (theme, accent color)
   - [x] Wallpaper picker (12 gradient wallpapers)
-  - [ ] Account (profile, password)
+  - [x] Account (display name, email, avatar emoji, bio — persisted to `cloudos:profile`)
   - [x] Storage (usage, quota, trash management)
-  - [ ] Apps (installed, defaults)
-  - [ ] Keyboard shortcuts
+  - [x] Apps (list installed manifest apps, launch / uninstall, manage recent-app history)
+  - [x] Keyboard shortcuts (read-only summary + reset-custom; deep-link to Shortcuts app for editing)
   - [x] About (system info)
 - [x] Calculator app
 - [x] Browser app (iframe-based)

@@ -1,7 +1,8 @@
-import { Component, For, Show, createMemo } from "solid-js";
+import { Component, For, Show, createMemo, createSignal } from "solid-js";
 import { startMenuOpen, setStartMenuOpen } from "../stores/startmenu-store";
 import { openWindow, windowStore, focusWindow } from "../stores/window-store";
 import { listManifests, manifestsVersion } from "../core/app-manifest";
+import { recentApps, recordRecent } from "../stores/recents-store";
 
 interface AppEntry {
   id: string;
@@ -26,6 +27,8 @@ const builtinApps: AppEntry[] = [
 ];
 
 export const StartMenu: Component = () => {
+  const [query, setQuery] = createSignal("");
+
   const allApps = createMemo<AppEntry[]>(() => {
     void manifestsVersion();
     const seen = new Set(builtinApps.map((a) => a.id));
@@ -42,8 +45,25 @@ export const StartMenu: Component = () => {
     return [...builtinApps, ...extra];
   });
 
+  const filteredApps = createMemo<AppEntry[]>(() => {
+    const q = query().trim().toLowerCase();
+    if (!q) return allApps();
+    return allApps().filter(
+      (a) => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q),
+    );
+  });
+
+  const recentEntries = createMemo<AppEntry[]>(() => {
+    const byId = new Map(allApps().map((a) => [a.id, a]));
+    return recentApps()
+      .map((id) => byId.get(id))
+      .filter((a): a is AppEntry => Boolean(a));
+  });
+
   const launchApp = (app: AppEntry) => {
     setStartMenuOpen(false);
+    setQuery("");
+    recordRecent(app.id);
     const existing = windowStore.windows.find((w) => w.appId === app.id);
     if (existing) {
       focusWindow(existing.id);
@@ -75,22 +95,56 @@ export const StartMenu: Component = () => {
             type="text"
             placeholder="Search apps..."
             class="w-full px-3 py-1.5 text-xs rounded-lg bg-os-surface border border-os-border text-os-text placeholder:text-os-text-muted focus:outline-none focus:border-os-accent"
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && filteredApps().length > 0) launchApp(filteredApps()[0]);
+              if (e.key === "Escape") setStartMenuOpen(false);
+            }}
+            autofocus
           />
         </div>
 
+        {/* Recent (only shown when not searching) */}
+        <Show when={query().trim() === "" && recentEntries().length > 0}>
+          <div class="px-3 pt-2">
+            <p class="text-[10px] text-os-text-muted uppercase tracking-wider mb-1.5">Recent</p>
+            <div class="grid grid-cols-3 gap-2">
+              <For each={recentEntries()}>
+                {(app) => (
+                  <button
+                    class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-os-surface-hover transition-colors"
+                    onClick={() => launchApp(app)}
+                  >
+                    <span class="text-xl">{app.icon}</span>
+                    <span class="text-[9px] text-os-text-muted text-center leading-tight">{app.name}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+            <div class="mt-2 border-t border-os-border" />
+          </div>
+        </Show>
+
         {/* App Grid */}
         <div class="p-3 grid grid-cols-3 gap-2 overflow-y-auto max-h-[50vh]">
-          <For each={allApps()}>
-            {(app) => (
-              <button
-                class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-os-surface-hover transition-colors"
-                onClick={() => launchApp(app)}
-              >
-                <span class="text-2xl">{app.icon}</span>
-                <span class="text-[10px] text-os-text-muted text-center leading-tight">{app.name}</span>
-              </button>
-            )}
-          </For>
+          <Show when={filteredApps().length > 0} fallback={
+            <div class="col-span-3 text-center text-[11px] text-os-text-muted py-6">
+              No apps match "{query()}"
+            </div>
+          }>
+            <For each={filteredApps()}>
+              {(app) => (
+                <button
+                  class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-os-surface-hover transition-colors"
+                  onClick={() => launchApp(app)}
+                >
+                  <span class="text-2xl">{app.icon}</span>
+                  <span class="text-[10px] text-os-text-muted text-center leading-tight">{app.name}</span>
+                </button>
+              )}
+            </For>
+          </Show>
         </div>
 
         {/* Footer */}

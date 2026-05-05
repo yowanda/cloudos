@@ -1,7 +1,12 @@
-import { Component, For, createSignal, Show, onCleanup, onMount } from "solid-js";
+import { Component, For, createMemo, createSignal, Show, onCleanup, onMount } from "solid-js";
 import { theme, setTheme, accentColor, setAccentColor, wallpaper, setWallpaper } from "../stores/theme-store";
 import { vfsStats, formatSize, emptyTrash, subscribeTrash, type VFSStats } from "../vfs/vfs";
 import { notify } from "../stores/notification-store";
+import { profile, updateProfile, resetProfile } from "../stores/profile-store";
+import { recentApps, clearRecents } from "../stores/recents-store";
+import { listManifests, manifestsVersion, uninstallManifest } from "../core/app-manifest";
+import { listShortcuts, resetShortcut } from "../core/shortcut-manager";
+import { openWindow } from "../stores/window-store";
 import {
   soundEnabled,
   soundVolume,
@@ -11,7 +16,16 @@ import {
   type SoundName,
 } from "../core/sound-manager";
 
-type SettingsPage = "appearance" | "wallpaper" | "sound" | "storage" | "backend" | "about";
+type SettingsPage =
+  | "appearance"
+  | "wallpaper"
+  | "sound"
+  | "account"
+  | "apps"
+  | "keyboard"
+  | "storage"
+  | "backend"
+  | "about";
 
 const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB demo quota
 
@@ -58,6 +72,9 @@ const Settings: Component<{ windowId: string }> = () => {
     { id: "appearance", label: "Appearance", icon: "🎨" },
     { id: "wallpaper", label: "Wallpaper", icon: "🖼️" },
     { id: "sound", label: "Sound", icon: "🔊" },
+    { id: "account", label: "Account", icon: "👤" },
+    { id: "apps", label: "Apps", icon: "📦" },
+    { id: "keyboard", label: "Keyboard", icon: "⌨️" },
     { id: "storage", label: "Storage", icon: "💾" },
     { id: "backend", label: "Backend", icon: "🔗" },
     { id: "about", label: "About", icon: "ℹ️" },
@@ -258,6 +275,18 @@ const Settings: Component<{ windowId: string }> = () => {
           </div>
         </Show>
 
+        <Show when={page() === "account"}>
+          <AccountPage />
+        </Show>
+
+        <Show when={page() === "apps"}>
+          <AppsPage />
+        </Show>
+
+        <Show when={page() === "keyboard"}>
+          <KeyboardPage />
+        </Show>
+
         <Show when={page() === "storage"}>
           <h2 class="text-sm font-semibold mb-4">Storage</h2>
 
@@ -389,6 +418,247 @@ const Settings: Component<{ windowId: string }> = () => {
 };
 
 export default Settings;
+
+// ---------------------------------------------------------------------------
+// Account: edit displayName / email / avatar / bio (persisted to localStorage)
+// ---------------------------------------------------------------------------
+const AccountPage: Component = () => {
+  const avatarOptions = ["🙂", "😎", "🐶", "🐱", "🦊", "🐼", "🦄", "🐙", "🤖", "👨‍💻", "👩‍💻", "🦉"];
+  return (
+    <div class="space-y-4">
+      <h2 class="text-sm font-semibold">Account</h2>
+      <p class="text-os-text-muted">
+        These details are stored locally in your browser. CloudOS doesn't talk to a remote server
+        for the local desktop unless you switch the storage backend to Remote.
+      </p>
+
+      <div class="rounded-lg border border-os-border p-4 flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full bg-os-accent/20 flex items-center justify-center text-2xl">
+          {profile.avatar}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">{profile.displayName || "Local User"}</div>
+          <div class="text-[11px] text-os-text-muted truncate">
+            {profile.email || "No email set"}
+          </div>
+        </div>
+      </div>
+
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Display name</span>
+        <input
+          type="text"
+          class="w-full px-3 py-1.5 rounded-md bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+          value={profile.displayName}
+          onInput={(e) => updateProfile({ displayName: e.currentTarget.value })}
+        />
+      </label>
+
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Email</span>
+        <input
+          type="email"
+          class="w-full px-3 py-1.5 rounded-md bg-os-surface border border-os-border focus:outline-none focus:border-os-accent"
+          placeholder="you@example.com"
+          value={profile.email}
+          onInput={(e) => updateProfile({ email: e.currentTarget.value })}
+        />
+      </label>
+
+      <label class="block">
+        <span class="block text-os-text-muted mb-1">Bio</span>
+        <textarea
+          rows="3"
+          class="w-full px-3 py-1.5 rounded-md bg-os-surface border border-os-border focus:outline-none focus:border-os-accent resize-none"
+          placeholder="A short bio..."
+          value={profile.bio}
+          onInput={(e) => updateProfile({ bio: e.currentTarget.value })}
+        />
+      </label>
+
+      <div>
+        <span class="block text-os-text-muted mb-1.5">Avatar</span>
+        <div class="flex gap-1.5 flex-wrap">
+          <For each={avatarOptions}>
+            {(emoji) => (
+              <button
+                class="w-9 h-9 rounded-full text-xl flex items-center justify-center transition-all"
+                classList={{
+                  "bg-os-accent/30 ring-2 ring-os-accent": profile.avatar === emoji,
+                  "bg-os-surface hover:bg-os-surface-hover": profile.avatar !== emoji,
+                }}
+                onClick={() => updateProfile({ avatar: emoji })}
+              >
+                {emoji}
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button
+          class="text-os-danger hover:underline text-[11px]"
+          onClick={() => {
+            resetProfile();
+            notify({ title: "Profile reset", message: "Account details cleared", type: "info", icon: "👤" });
+          }}
+        >
+          Reset profile to defaults
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Apps: list installed manifest apps + launch / uninstall, manage recents
+// ---------------------------------------------------------------------------
+const AppsPage: Component = () => {
+  const manifests = createMemo(() => {
+    void manifestsVersion();
+    return listManifests();
+  });
+
+  const handleUninstall = (id: string, name: string) => {
+    if (!window.confirm(`Uninstall ${name}? This removes the manifest entry.`)) return;
+    if (uninstallManifest(id)) {
+      notify({ title: "Uninstalled", message: name, type: "info", icon: "📦" });
+    } else {
+      notify({ title: "Uninstall failed", message: "Manifest not found", type: "warning", icon: "⚠️" });
+    }
+  };
+
+  const launch = (id: string, name: string, icon: string) => {
+    openWindow({ appId: id, title: name, icon, width: 720, height: 480 });
+  };
+
+  return (
+    <div class="space-y-4">
+      <h2 class="text-sm font-semibold">Apps</h2>
+      <p class="text-os-text-muted">Manage installed manifest apps and your recent-app history.</p>
+
+      <div>
+        <h3 class="text-xs font-semibold mb-2">Installed apps</h3>
+        <Show when={manifests().length > 0} fallback={
+          <div class="rounded-lg border border-dashed border-os-border p-4 text-center text-[11px] text-os-text-muted">
+            No manifest apps installed yet. Drop a JSON manifest into App Store, or write one yourself
+            (see docs/APP_DEV.md).
+          </div>
+        }>
+          <div class="grid gap-2">
+            <For each={manifests()}>
+              {(m) => (
+                <div class="flex items-center gap-3 p-3 rounded-lg border border-os-border">
+                  <span class="text-2xl flex-shrink-0">{m.icon}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="font-medium truncate">{m.name}</div>
+                    <div class="text-[10px] text-os-text-muted truncate">
+                      {m.id} · v{m.version} · {m.category ?? "Apps"}
+                    </div>
+                  </div>
+                  <button
+                    class="px-2 py-1 rounded text-[11px] hover:bg-os-surface-hover transition-colors"
+                    onClick={() => launch(m.id, m.name, m.icon)}
+                  >
+                    Launch
+                  </button>
+                  <button
+                    class="px-2 py-1 rounded text-[11px] text-os-danger hover:bg-os-danger/20 transition-colors"
+                    onClick={() => handleUninstall(m.id, m.name)}
+                  >
+                    Uninstall
+                  </button>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <div class="pt-3 border-t border-os-border">
+        <h3 class="text-xs font-semibold mb-2">Recent apps</h3>
+        <Show when={recentApps().length > 0} fallback={
+          <p class="text-[11px] text-os-text-muted">No recent launches yet.</p>
+        }>
+          <div class="text-[11px] text-os-text-muted space-y-1 mb-2">
+            <For each={recentApps()}>{(id) => <div>{id}</div>}</For>
+          </div>
+          <button
+            class="px-3 py-1 rounded-md bg-os-surface border border-os-border hover:bg-os-surface-hover text-[11px]"
+            onClick={() => {
+              clearRecents();
+              notify({ title: "Recents cleared", type: "info", icon: "📦" });
+            }}
+          >
+            Clear recents
+          </button>
+        </Show>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Keyboard: list shortcuts (read-only summary; full editor is in Shortcuts app)
+// ---------------------------------------------------------------------------
+const KeyboardPage: Component = () => {
+  const shortcuts = () => listShortcuts();
+
+  const formatBinding = (b: { key: string; ctrl?: boolean; alt?: boolean; shift?: boolean; meta?: boolean }) => {
+    const parts: string[] = [];
+    if (b.ctrl) parts.push("Ctrl");
+    if (b.alt) parts.push("Alt");
+    if (b.shift) parts.push("Shift");
+    if (b.meta) parts.push("Meta");
+    if (b.key === " ") parts.push("Space"); else parts.push(b.key.toUpperCase());
+    return parts.join(" + ");
+  };
+
+  return (
+    <div class="space-y-4">
+      <h2 class="text-sm font-semibold">Keyboard</h2>
+      <p class="text-os-text-muted">
+        Quick overview of registered shortcuts. Use the Shortcuts app for full editing (record new
+        binding, conflict detection, reset all).
+      </p>
+      <button
+        class="px-3 py-1.5 rounded-md bg-os-accent/20 hover:bg-os-accent/30 text-os-accent-hover text-[11px] transition-colors"
+        onClick={() => openWindow({ appId: "com.cloudos.shortcuts", title: "Shortcuts", icon: "⌨️", width: 700, height: 520 })}
+      >
+        Open Shortcuts app
+      </button>
+
+      <div class="rounded-lg border border-os-border divide-y divide-os-border overflow-hidden">
+        <For each={shortcuts()}>
+          {(s) => (
+            <div class="flex items-center gap-3 px-3 py-2 text-[11px]">
+              <span class="flex-1 truncate">{s.description}</span>
+              <kbd class="px-2 py-0.5 rounded bg-os-surface border border-os-border font-mono">
+                {formatBinding(s.current)}
+              </kbd>
+              <Show when={s.isCustom}>
+                <button
+                  class="text-[10px] text-os-text-muted hover:text-os-text"
+                  title="Reset to default"
+                  onClick={() => {
+                    resetShortcut(s.id);
+                    notify({ title: "Shortcut reset", message: s.description, type: "info", icon: "⌨️" });
+                  }}
+                >
+                  ↻ reset
+                </button>
+              </Show>
+              <Show when={s.locked}>
+                <span class="text-[10px] text-os-text-muted">locked</span>
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+};
 
 const BackendPanel: Component = () => {
   const [backends, setBackends] = createSignal<{ id: string; displayName: string; available: boolean }[]>([]);

@@ -2,6 +2,7 @@ import { Component, For } from "solid-js";
 import { openWindow, currentDesktopWindows, focusWindow } from "../stores/window-store";
 import { hideContextMenu } from "../stores/contextmenu-store";
 import { setStartMenuOpen } from "../stores/startmenu-store";
+import { recordRecent } from "../stores/recents-store";
 
 interface DockItem {
   id: string;
@@ -26,6 +27,7 @@ const Dock: Component = () => {
   const handleClick = (item: DockItem) => {
     hideContextMenu();
     setStartMenuOpen(false);
+    recordRecent(item.id);
 
     const existing = currentDesktopWindows().find((w) => w.appId === item.id);
     if (existing) {

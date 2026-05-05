@@ -39,6 +39,12 @@
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
 | Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
+### Settings & Start menu polish
+- **Start menu search & recents** — type to filter the app grid; `Enter` launches the top match. Recent launches show in their own row and are recorded across the Start menu, Dock, and Spotlight.
+- **Account page** — Display name, email, avatar emoji, and bio, stored in `cloudos:profile`. Reset clears the entry.
+- **Apps page** — Lists installed manifest apps with icon, version, and category. One-click Launch / Uninstall. Recents history is also browsable + clearable here.
+- **Keyboard page** — Quick read-only summary of every registered shortcut with a "↻ reset" link for any custom binding; "Open Shortcuts app" for the full editor.
+
 ### Image Viewer
 Real image-viewer app (replaces the old stub). Pan with click-drag, zoom with the mouse wheel or `+`/`−`, rotate with `R`, reset with `0`, navigate with `←`/`→`, slideshow with `Space`. Filmstrip thumbnails, status bar with zoom + rotation, URL input box, host drag-drop. When opened from File Manager, it auto-loads sibling images in the same folder so you can flip through a directory.
 
