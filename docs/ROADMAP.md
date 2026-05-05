@@ -165,11 +165,11 @@
   - [x] Install / uninstall
   - [x] Ratings & reviews (1–5 stars, write/edit/delete your own, average + histogram, persisted in localStorage)
   - [ ] Developer portal (submit apps)
-- [ ] AI Assistant
-  - [ ] Chat UI (sidebar or window)
-  - [ ] LLM API integration (OpenAI/Anthropic/local)
+- [x] AI Assistant
+  - [x] Chat UI (windowed app, multi-conversation sidebar, persisted)
+  - [x] LLM API integration (OpenAI, Anthropic, Ollama, OpenAI-compatible, offline echo)
   - [ ] Context-aware (can read files, run commands)
-  - [ ] Prompt templates
+  - [x] Prompt templates (configurable system prompt)
 - [x] Media Player
   - [x] Video player (HTML5 <video>, supports mp4/webm/ogg)
   - [x] Audio player with track list

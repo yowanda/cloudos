@@ -10,6 +10,7 @@ import Notes from "./Notes";
 import AppStore from "./AppStore";
 import MediaPlayer from "./MediaPlayer";
 import Shortcuts from "./Shortcuts";
+import AIAssistant from "./AIAssistant";
 
 export function registerAllApps() {
   registerAppComponent("com.cloudos.files", FileManager);
@@ -23,4 +24,5 @@ export function registerAllApps() {
   registerAppComponent("com.cloudos.appstore", AppStore);
   registerAppComponent("com.cloudos.mediaplayer", MediaPlayer);
   registerAppComponent("com.cloudos.shortcuts", Shortcuts);
+  registerAppComponent("com.cloudos.assistant", AIAssistant);
 }

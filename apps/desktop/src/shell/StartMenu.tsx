@@ -21,6 +21,7 @@ const allApps: AppEntry[] = [
   { id: "com.cloudos.notes", name: "Notes", icon: "📒", category: "Productivity" },
   { id: "com.cloudos.appstore", name: "App Store", icon: "🏪", category: "System" },
   { id: "com.cloudos.shortcuts", name: "Shortcuts", icon: "⌨️", category: "System" },
+  { id: "com.cloudos.assistant", name: "Assistant", icon: "🤖", category: "Productivity" },
 ];
 
 export const StartMenu: Component = () => {
