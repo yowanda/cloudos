@@ -1,5 +1,13 @@
 import { createSignal } from "solid-js";
-import { exportSnapshot, importSnapshot, subscribeFs } from "./vfs";
+import {
+  entriesChangedSince,
+  exportSnapshot,
+  getLatestClock,
+  importSnapshot,
+  mergeDelta,
+  subscribeFs,
+  tombstonesSince,
+} from "./vfs";
 import type { VFSAdapter, VFSAdapterStatus, VFSBackend } from "./adapter";
 import { memoryAdapter } from "./adapters/memory";
 import { opfsAdapter } from "./adapters/opfs";
@@ -7,6 +15,8 @@ import { remoteAdapter } from "./adapters/remote";
 
 const BACKEND_KEY = "cloudos:vfs:backend";
 const STATUS_KEY = "cloudos:vfs:status";
+const INCREMENTAL_KEY = "cloudos:vfs:sync-incremental";
+const LAST_PUSHED_CLOCK_KEY = "cloudos:vfs:last-pushed-clock";
 
 const adapters: Record<VFSBackend, VFSAdapter> = {
   memory: memoryAdapter,
@@ -42,11 +52,90 @@ function saveStatus(s: { lastSync: number | null; lastError: string | null }) {
   }
 }
 
+// ───── Incremental sync preference (B31, stage 2b) ──────────────────
+//
+// `useIncremental` controls whether the remote adapter's full-snapshot
+// `save` path or the lightweight `syncDelta` (POST /vfs/changes) path
+// is used. Default ON — the new endpoint is what every fresh CloudOS
+// server ships with, and the adapter automatically falls back to a
+// full snapshot if the server returns 404 (old build). Users can flip
+// this off in Settings → Backend if they prefer the legacy behaviour.
+
+function loadIncrementalPref(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = window.localStorage.getItem(INCREMENTAL_KEY);
+  // null (never set) → default true; "0" → off; anything else → on.
+  return v !== "0";
+}
+
+function loadLastPushedClock(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = window.localStorage.getItem(LAST_PUSHED_CLOCK_KEY);
+    if (!raw) return 0;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveLastPushedClock(n: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LAST_PUSHED_CLOCK_KEY, String(n));
+  } catch {
+    // ignore
+  }
+}
+
 const [activeBackend, setActiveBackend] = createSignal<VFSBackend>(loadBackend());
 const [status, setStatus] = createSignal(loadStatus());
 const [busy, setBusy] = createSignal(false);
+const [useIncremental, setUseIncrementalSig] = createSignal<boolean>(loadIncrementalPref());
+const [lastPushedClock, setLastPushedClockSig] = createSignal<number>(loadLastPushedClock());
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Try the adapter's `syncDelta` if the user has opted in and the
+ * adapter implements it. Returns true if the round-trip happened (so
+ * the caller can skip the full-snapshot fallback). Any error is
+ * propagated to the caller.
+ */
+async function tryIncrementalSync(adapter: VFSAdapter): Promise<boolean> {
+  if (!useIncremental()) return false;
+  if (typeof adapter.syncDelta !== "function") return false;
+
+  const since = lastPushedClock();
+  const payload = {
+    since,
+    entries: entriesChangedSince(since),
+    tombstones: tombstonesSince(since),
+  };
+  // First sync after a fresh hydrate may have nothing locally pending.
+  // We still hit the endpoint so we can pull any server-side changes
+  // we don't yet have, but we skip if nothing on either side has
+  // advanced past the watermark.
+  const localClock = getLatestClock();
+  if (payload.entries.length === 0 && payload.tombstones.length === 0 && localClock <= since) {
+    return true;
+  }
+
+  const resp = await adapter.syncDelta(payload);
+  if (!resp) return false; // adapter signalled "no support" — caller falls back
+
+  // Apply server's inverse delta locally. mergeDelta handles LWW so we
+  // never clobber a strictly-newer local write.
+  if (resp.entries.length > 0 || resp.tombstones.length > 0) {
+    mergeDelta({ entries: resp.entries, tombstones: resp.tombstones });
+  }
+  // Persist the new watermark — anything with clock <= resp.clock has
+  // been observed by the server.
+  setLastPushedClockSig(resp.clock);
+  saveLastPushedClock(resp.clock);
+  return true;
+}
 
 async function performSave() {
   const backend = activeBackend();
@@ -54,7 +143,24 @@ async function performSave() {
   const adapter = adapters[backend];
   setBusy(true);
   try {
-    await adapter.save(exportSnapshot());
+    let pushed = false;
+    try {
+      pushed = await tryIncrementalSync(adapter);
+    } catch (e) {
+      // Incremental failed — log and fall through to full snapshot so
+      // the user's data still gets pushed.
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[vfs/sync] incremental sync failed; falling back to full snapshot: ${msg}`);
+    }
+    if (!pushed) {
+      await adapter.save(exportSnapshot());
+      // After a full snapshot, the server now has every entry up to
+      // our latest clock — bring the watermark forward so the next
+      // delta cycle is a true delta rather than a re-push.
+      const c = getLatestClock();
+      setLastPushedClockSig(c);
+      saveLastPushedClock(c);
+    }
     const s = { lastSync: Date.now(), lastError: null };
     setStatus(s);
     saveStatus(s);
@@ -101,6 +207,13 @@ export async function initVfsSync(): Promise<void> {
         const entries = await adapter.load();
         if (entries && entries.length > 0) {
           importSnapshot(entries);
+          // After a fresh full hydrate, the watermark is whatever the
+          // largest incoming clock was — pre-load that into the
+          // last-pushed-clock so the next delta sync only pushes
+          // changes that have happened since.
+          const c = getLatestClock();
+          setLastPushedClockSig(c);
+          saveLastPushedClock(c);
         }
       }
     } catch (e) {
@@ -126,6 +239,10 @@ export async function setBackend(next: VFSBackend): Promise<void> {
       window.localStorage.setItem(BACKEND_KEY, next);
     }
     setActiveBackend(next);
+    // Switching backends invalidates the watermark — the new backend
+    // doesn't know what we've already pushed there.
+    setLastPushedClockSig(0);
+    saveLastPushedClock(0);
     attachFsListener();
     if (next !== "memory") {
       // Push current snapshot to the new backend
@@ -159,6 +276,9 @@ export async function pullFromBackend(): Promise<void> {
     const entries = await adapter.load();
     if (entries) {
       importSnapshot(entries);
+      const c = getLatestClock();
+      setLastPushedClockSig(c);
+      saveLastPushedClock(c);
       const s = { lastSync: Date.now(), lastError: null };
       setStatus(s);
       saveStatus(s);
@@ -173,7 +293,22 @@ export async function pullFromBackend(): Promise<void> {
   }
 }
 
-export { activeBackend, status as syncStatus, busy as syncBusy };
+/** Reactive accessor for the user's incremental-sync preference. */
+export const incrementalEnabled = useIncremental;
+
+/** Toggle the incremental-sync preference and persist. */
+export function setIncrementalEnabled(next: boolean): void {
+  setUseIncrementalSig(next);
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(INCREMENTAL_KEY, next ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+/** Reactive accessor for the last clock the server confirmed receipt of. */
+export const lastPushedClockSig = lastPushedClock;
 
 export async function adapterStatuses(): Promise<VFSAdapterStatus[]> {
   const out: VFSAdapterStatus[] = [];
@@ -190,3 +325,5 @@ export async function adapterStatuses(): Promise<VFSAdapterStatus[]> {
   }
   return out;
 }
+
+export { activeBackend, status as syncStatus, busy as syncBusy };

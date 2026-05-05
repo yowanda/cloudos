@@ -86,6 +86,156 @@ export function entriesChangedSince(since: number): VFSEntry[] {
   return out;
 }
 
+// ───── Tombstones (B31, stage 2b) ───────────────────────────────────
+//
+// When the user deletes an entry locally we record a "tombstone" so the
+// next incremental sync can tell the server "this path was removed at
+// clock N". Without tombstones the server would just see that entries
+// disappeared on the client (because we only send `entriesChangedSince`)
+// and assume the client just hadn't fetched them yet — leading to the
+// deleted file being re-pushed from another device.
+//
+// Tombstones are persisted in localStorage:cloudos:vfs:tombstones so
+// they survive reloads, and capped to a moderate maximum (older entries
+// drop off LRU-style by clock) to keep storage bounded.
+
+export interface VFSTombstone {
+  path: string;
+  clock: number;
+}
+
+const TOMBSTONE_KEY = "cloudos:vfs:tombstones";
+const TOMBSTONE_MAX = 5000;
+const TOMBSTONE_TRIM = 1000;
+
+const tombstones: Map<string, VFSTombstone> = new Map();
+
+function persistTombstones() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      TOMBSTONE_KEY,
+      JSON.stringify(Array.from(tombstones.values())),
+    );
+  } catch {
+    // ignore — quota / private mode
+  }
+}
+
+function loadTombstones() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(TOMBSTONE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw) as VFSTombstone[];
+    if (!Array.isArray(data)) return;
+    for (const t of data) {
+      if (t?.path && typeof t.clock === "number") {
+        tombstones.set(t.path, { path: t.path, clock: t.clock });
+      }
+    }
+  } catch {
+    // ignore corrupt
+  }
+}
+
+/**
+ * Mark `path` as deleted at the next clock value. Used by deleteEntry /
+ * moveToTrash so the diff-sync can propagate the deletion to the server.
+ * Returns the recorded tombstone.
+ */
+function recordTombstone(path: string): VFSTombstone {
+  const t: VFSTombstone = { path, clock: nextClock() };
+  tombstones.set(path, t);
+  // LRU-style cap by clock — drop the oldest tombstones once we cross
+  // the max so localStorage usage stays bounded after long sessions
+  // with lots of deletions.
+  if (tombstones.size > TOMBSTONE_MAX) {
+    const sorted = [...tombstones.values()].sort((a, b) => a.clock - b.clock);
+    for (let i = 0; i < TOMBSTONE_TRIM; i++) {
+      tombstones.delete(sorted[i].path);
+    }
+  }
+  persistTombstones();
+  return t;
+}
+
+/** Tombstones with clock > since — used by incremental sync push. */
+export function tombstonesSince(since: number): VFSTombstone[] {
+  const out: VFSTombstone[] = [];
+  for (const t of tombstones.values()) {
+    if (t.clock > since) out.push({ ...t });
+  }
+  return out;
+}
+
+/** All current tombstones (read-only snapshot). */
+export function getAllTombstones(): VFSTombstone[] {
+  return Array.from(tombstones.values());
+}
+
+/**
+ * Apply a delta from a remote (typically the server's `POST
+ * /api/v1/vfs/changes` response) into the local VFS. Unlike
+ * `importSnapshot` which replaces the whole tree, `mergeDelta` only
+ * touches the paths in `entries` / `tombstones`, and respects
+ * last-write-wins by clock so we don't clobber local writes that
+ * happened concurrently.
+ *
+ * Side-effects:
+ *  - Local entry's clock is preserved if it's strictly greater than the
+ *    incoming entry's clock — i.e. our local write is newer and wins.
+ *  - Incoming clocks advance the global counter past any incoming max
+ *    so subsequent local mutations always issue a strictly greater clock.
+ *  - Tombstones with clock > local entry clock cause the local entry to
+ *    be removed.
+ */
+export function mergeDelta(delta: { entries?: VFSEntry[]; tombstones?: VFSTombstone[] }): void {
+  let touched = false;
+  let maxClock = latestClock;
+
+  for (const incoming of delta.entries ?? []) {
+    const c = incoming.clock ?? 0;
+    if (c > maxClock) maxClock = c;
+    const existing = fileSystem.get(incoming.path);
+    if (existing && (existing.clock ?? 0) > c) continue;
+    // If we have a local tombstone with a strictly greater clock, the
+    // deletion wins and we ignore the incoming entry.
+    const tomb = tombstones.get(incoming.path);
+    if (tomb && tomb.clock > c) continue;
+    // The incoming entry supersedes any tombstone for that path.
+    if (tomb) {
+      tombstones.delete(incoming.path);
+    }
+    fileSystem.set(incoming.path, { ...incoming, clock: c });
+    touched = true;
+  }
+
+  for (const t of delta.tombstones ?? []) {
+    if (t.clock > maxClock) maxClock = t.clock;
+    const existing = fileSystem.get(t.path);
+    if (existing && (existing.clock ?? 0) > t.clock) continue;
+    if (existing) {
+      fileSystem.delete(t.path);
+      touched = true;
+    }
+    const cur = tombstones.get(t.path);
+    if (!cur || t.clock > cur.clock) {
+      tombstones.set(t.path, { path: t.path, clock: t.clock });
+      touched = true;
+    }
+  }
+
+  if (maxClock > latestClock) {
+    latestClock = maxClock;
+    persistClock();
+  }
+  if (touched) {
+    persistTombstones();
+    notifyFs();
+  }
+}
+
 // ───── Quota ─────────────────────────────────────────────────────────
 //
 // Hard cap on combined active + trash bytes. Configured by the user
@@ -298,6 +448,7 @@ function initDefaultFS() {
 
 initDefaultFS();
 loadTrash();
+loadTombstones();
 
 export function listDir(path: string): VFSEntry[] {
   const entries: VFSEntry[] = [];
@@ -418,9 +569,15 @@ export function createDir(path: string, name: string): VFSEntry {
 }
 
 export function deleteEntry(path: string) {
+  if (fileSystem.has(path)) {
+    recordTombstone(path);
+  }
   fileSystem.delete(path);
-  for (const key of fileSystem.keys()) {
-    if (key.startsWith(path + "/")) fileSystem.delete(key);
+  for (const key of Array.from(fileSystem.keys())) {
+    if (key.startsWith(path + "/")) {
+      recordTombstone(key);
+      fileSystem.delete(key);
+    }
   }
   notifyFs();
 }
@@ -451,11 +608,18 @@ export function moveToTrash(path: string): TrashEntry | undefined {
     deletedAt: Date.now(),
   };
   trash.set(trashPath, record);
-  // remove original (and descendants if dir)
+  // record tombstones + remove original (and descendants if dir). The
+  // tombstone is what tells the diff-sync that the path was removed
+  // from the active tree — the trash bucket is purely client-side and
+  // is not synced to the remote.
+  recordTombstone(path);
   fileSystem.delete(path);
   if (entry.isDir) {
     for (const key of Array.from(fileSystem.keys())) {
-      if (key.startsWith(path + "/")) fileSystem.delete(key);
+      if (key.startsWith(path + "/")) {
+        recordTombstone(key);
+        fileSystem.delete(key);
+      }
     }
   }
   persistTrash();
@@ -578,14 +742,20 @@ export function moveEntry(srcPath: string, destDirPath: string): VFSEntry | unde
   if (fileSystem.has(newPath)) return undefined; // name collision, refuse silently
 
   if (src.isDir) {
-    // Rewrite the dir + every descendant key.
+    // Rewrite the dir + every descendant key. Each old path becomes a
+    // tombstone so the diff-sync sees the rename as
+    // `delete(oldPath) + create(newPath)`; otherwise the server would
+    // keep the old path around forever after we re-pushed.
     const entries: Array<[string, VFSEntry]> = [];
     for (const [path, entry] of fileSystem.entries()) {
       if (path === srcPath || path.startsWith(srcPath + "/")) {
         entries.push([path, entry]);
       }
     }
-    for (const [path] of entries) fileSystem.delete(path);
+    for (const [path] of entries) {
+      recordTombstone(path);
+      fileSystem.delete(path);
+    }
     for (const [oldP, entry] of entries) {
       const rest = oldP.slice(srcPath.length); // includes leading slash for descendants, "" for root
       const updatedPath = newPath + rest;
@@ -596,6 +766,7 @@ export function moveEntry(srcPath: string, destDirPath: string): VFSEntry | unde
       fileSystem.set(entry.path, entry);
     }
   } else {
+    recordTombstone(srcPath);
     fileSystem.delete(srcPath);
     src.path = newPath;
     src.updatedAt = Date.now();
@@ -613,6 +784,9 @@ export function renameEntry(oldPath: string, newName: string): VFSEntry | undefi
   const parentPath = oldPath.substring(0, oldPath.lastIndexOf("/")) || "/";
   const newPath = parentPath === "/" ? `/${newName}` : `${parentPath}/${newName}`;
 
+  // Tombstone the old path so the diff-sync doesn't see the entry
+  // simply "missing" and assume nothing changed.
+  recordTombstone(oldPath);
   fileSystem.delete(oldPath);
   entry.name = newName;
   entry.path = newPath;

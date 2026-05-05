@@ -1,4 +1,4 @@
-import type { VFSAdapter } from "../adapter";
+import type { VFSAdapter, VFSDeltaPayload, VFSDeltaResponse } from "../adapter";
 import type { VFSEntry } from "../vfs";
 
 const CONFIG_KEY = "cloudos:vfs:remote-config";
@@ -81,5 +81,32 @@ export const remoteAdapter: VFSAdapter = {
       const text = await res.text().catch(() => "");
       throw new Error(`Remote VFS save failed: HTTP ${res.status} ${text || res.statusText}`);
     }
+  },
+
+  async syncDelta(payload: VFSDeltaPayload): Promise<VFSDeltaResponse | null> {
+    const cfg = loadRemoteConfig();
+    const url = `${cfg.baseUrl.replace(/\/$/, "")}/vfs/changes`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: headers(cfg),
+      body: JSON.stringify({
+        since: payload.since,
+        entries: payload.entries,
+        tombstones: payload.tombstones,
+      }),
+    });
+    // 404 = old server without the /changes endpoint. Surface as `null`
+    // so sync.ts knows to fall back to the full-snapshot `save` path.
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Remote VFS delta sync failed: HTTP ${res.status} ${text || res.statusText}`);
+    }
+    const data = (await res.json()) as Partial<VFSDeltaResponse>;
+    return {
+      clock: typeof data.clock === "number" ? data.clock : payload.since,
+      entries: Array.isArray(data.entries) ? data.entries : [],
+      tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
+    };
   },
 };

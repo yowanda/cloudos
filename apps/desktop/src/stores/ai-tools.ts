@@ -26,6 +26,7 @@ import {
   exportSnapshot,
   formatSize,
   getEntry,
+  getAllTombstones,
   getLatestClock,
   listDir,
   vfsStats,
@@ -196,7 +197,14 @@ const commands: Record<string, CommandHandler> = {
     usage: "/clock",
     run: () => {
       const c = getLatestClock();
-      return `Latest VFS clock: **${c}**. Clock advances on every create / write / rename / move / delete and is the watermark used by the per-entry diff-sync protocol (\`POST /api/v1/vfs/changes\`).`;
+      const ts = getAllTombstones();
+      const lines = [
+        `Latest VFS clock: **${c}**`,
+        `Tombstones tracked: **${ts.length}**`,
+        "",
+        "The clock advances on every create / write / rename / move / delete and is the watermark used by the per-entry diff-sync protocol (`POST /api/v1/vfs/changes`). Tombstones record path-deletes so they propagate to the server even though deleted entries are no longer present locally.",
+      ];
+      return lines.join("\n");
     },
   },
 

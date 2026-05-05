@@ -1033,17 +1033,26 @@ const KeyboardPage: Component = () => {
 const BackendPanel: Component = () => {
   const [backends, setBackends] = createSignal<{ id: string; displayName: string; available: boolean }[]>([]);
   const [remoteCfg, setRemoteCfg] = createSignal<{ baseUrl: string; token: string }>({ baseUrl: "/api/v1", token: "" });
+  const [incremental, setIncremental] = createSignal<boolean>(true);
+  const [clockInfo, setClockInfo] = createSignal<{ latest: number; pushed: number }>({ latest: 0, pushed: 0 });
 
   const refresh = async () => {
-    const { adapterStatuses } = await import("../vfs/sync");
+    const { adapterStatuses, incrementalEnabled, lastPushedClockSig } = await import("../vfs/sync");
     const { loadRemoteConfig } = await import("../vfs/adapters/remote");
+    const { getLatestClock } = await import("../vfs/vfs");
     const list = await adapterStatuses();
     setBackends(list.map((b) => ({ id: b.id, displayName: b.displayName, available: b.available })));
     setRemoteCfg(loadRemoteConfig());
+    setIncremental(incrementalEnabled());
+    setClockInfo({ latest: getLatestClock(), pushed: lastPushedClockSig() });
   };
 
   onMount(() => {
     void refresh();
+    // Refresh the clock display every couple of seconds while the panel
+    // is open so the user can see the watermark advance after a sync.
+    const t = setInterval(() => void refresh(), 2000);
+    onCleanup(() => clearInterval(t));
   });
 
   const switchTo = async (id: "memory" | "opfs" | "remote") => {
@@ -1068,6 +1077,19 @@ const BackendPanel: Component = () => {
     const { pullFromBackend } = await import("../vfs/sync");
     await pullFromBackend();
     notify({ title: "Sync", message: "Pulled snapshot from backend", type: "success", icon: "💾" });
+  };
+
+  const toggleIncremental = async () => {
+    const { setIncrementalEnabled } = await import("../vfs/sync");
+    const next = !incremental();
+    setIncrementalEnabled(next);
+    setIncremental(next);
+    notify({
+      title: "Incremental sync",
+      message: next ? "Enabled — pushing diffs only" : "Disabled — pushing full snapshots",
+      type: "info",
+      icon: "💾",
+    });
   };
 
   const saveRemote = async () => {
@@ -1140,12 +1162,35 @@ const BackendPanel: Component = () => {
         Save remote config
       </button>
 
+      <div class="pt-3 mt-3 border-t border-os-border space-y-2">
+        <h3 class="text-xs font-semibold">Sync mode</h3>
+        <label class="flex items-center justify-between gap-3 p-2 rounded border border-os-border bg-os-surface">
+          <div>
+            <div class="text-xs font-medium">Incremental sync (delta only)</div>
+            <div class="text-[10px] text-os-text-muted">
+              Pushes only the entries / tombstones whose clock advanced since the last round-trip. Falls back to a full snapshot if the server is older and doesn't expose <code>POST /api/v1/vfs/changes</code>.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={incremental()}
+            onChange={() => void toggleIncremental()}
+          />
+        </label>
+        <div class="text-[10px] text-os-text-muted font-mono">
+          Local clock: <strong>{clockInfo().latest}</strong> · Last pushed: <strong>{clockInfo().pushed}</strong>
+          <Show when={clockInfo().latest > clockInfo().pushed}>
+            <span class="ml-2 text-os-accent">({clockInfo().latest - clockInfo().pushed} pending)</span>
+          </Show>
+        </div>
+      </div>
+
       <div class="flex gap-2 pt-3 border-t border-os-border">
         <button
           class="px-3 py-1.5 rounded bg-os-surface border border-os-border hover:bg-os-surface-hover"
           onClick={() => void syncNowClick()}
         >
-          Push snapshot now
+          Push now
         </button>
         <button
           class="px-3 py-1.5 rounded bg-os-surface border border-os-border hover:bg-os-surface-hover"
