@@ -51,37 +51,43 @@
 
 **Goal:** Built-in apps yang bikin OS useful.
 
-- [ ] File Manager
-  - [ ] Grid view + List view toggle
-  - [ ] Breadcrumb navigation
-  - [ ] Sidebar (favorites, tree view)
-  - [ ] File operations (create, rename, delete, copy, move)
+- [x] File Manager
+  - [x] Grid view + List view toggle
+  - [x] Breadcrumb navigation
+  - [x] Sidebar (favorites, tree view)
+  - [x] File operations (create, rename, delete, copy, move)
   - [ ] Drag & drop (within + upload from host)
   - [ ] File preview panel (quick look)
   - [ ] Upload/download files
-- [ ] Terminal
-  - [ ] xterm.js integration
+- [x] Terminal
+  - [x] Shell emulation with built-in commands
+  - [ ] xterm.js integration (needs backend)
   - [ ] WebSocket ↔ PTY bridge (backend)
   - [ ] Multi-tab support
-  - [ ] Terminal color themes
+  - [x] Terminal color themes
   - [ ] Copy/paste support
-- [ ] Text Editor
+- [x] Text Editor
+  - [x] Code editor with line numbers
+  - [x] Multi-file tabs UI
   - [ ] Monaco Editor integration
-  - [ ] Multi-file tabs
   - [ ] Syntax highlighting (auto-detect)
   - [ ] Save to VFS
-  - [ ] Minimap
-- [ ] Image Viewer
+  - [x] Minimap placeholder
+- [x] Image Viewer (placeholder)
   - [ ] Pan, zoom, rotate
   - [ ] Slideshow mode
   - [ ] Support: PNG, JPG, GIF, WebP, SVG
-- [ ] Settings App
-  - [ ] Appearance (theme, wallpaper, accent color)
+- [x] Settings App
+  - [x] Appearance (theme, accent color)
+  - [ ] Wallpaper picker
   - [ ] Account (profile, password)
   - [ ] Storage (usage, quota)
   - [ ] Apps (installed, defaults)
   - [ ] Keyboard shortcuts
-  - [ ] About (system info)
+  - [x] About (system info)
+- [x] Calculator app
+- [x] Browser app (iframe-based)
+- [x] Notes app
 - [ ] Notification system
   - [ ] Toast notifications
   - [ ] Notification center panel
