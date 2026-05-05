@@ -45,6 +45,18 @@
 - **Apps page** — Lists installed manifest apps with icon, version, and category. One-click Launch / Uninstall. Recents history is also browsable + clearable here.
 - **Keyboard page** — Quick read-only summary of every registered shortcut with a "↻ reset" link for any custom binding; "Open Shortcuts app" for the full editor.
 
+### Notifications with action buttons
+Toasts and the Notification Center now support **per-notification action buttons** with three styles (`default`, `primary`, `danger`) and built-in helpers:
+
+- `dismissAction()` — closes the toast / marks read
+- `snoozeAction(ms)` — hides the toast and re-pops as a fresh toast after the snooze interval. Snoozed notifications show a 💤 pill in the Notification Center with a *"Wake now"* link
+- `openAppAction(appId, title, icon)` — opens an app window via the window store
+- Custom `{ id, label, icon?, kind?, run }` actions for anything else
+
+Toasts that have actions stay open until the user interacts (no auto-dismiss); a small `×` in the corner force-dismisses. The runtime gate calls into the same store, so a sandbox app calling `cloudos.notify({...actions})` works the same as a native CloudOS notification.
+
+Try it: open the **Share** dialog on any file → pick a permission → "Create share". The success toast carries a "Copy link" + "Open" action pair.
+
 ### Per-app permissions
 Manifest apps go through a two-stage permission gate, modelled on the browser's own `Notification.requestPermission()` flow:
 1. **Manifest declaration** — the app's manifest must list every permission it might use (`notifications`, `files.read`, `files.write`, `windows`, `clipboard.read`, `clipboard.write`). Anything else is rejected at the bridge.

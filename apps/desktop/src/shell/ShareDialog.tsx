@@ -45,18 +45,42 @@ const ShareDialog: Component<Props> = (props) => {
         expiresInDays: expiresInDays(),
         password: password() || undefined,
       });
-      notify({
-        title: "Share created",
-        message: `${props.fileName} now shareable as ${permission()}`,
-        type: "success",
-        icon: "🔗",
-      });
       // Auto-copy link
       try {
         await navigator.clipboard.writeText(shareUrl(s.token));
       } catch {
         // ignore
       }
+      // Surface the link with action buttons so the user can re-copy
+      // or open the share immediately from the toast.
+      notify({
+        title: "Share created",
+        message: `${props.fileName} (${permission()}) — link copied to clipboard`,
+        type: "success",
+        icon: "🔗",
+        actions: [
+          {
+            id: "copy",
+            label: "Copy link",
+            icon: "📋",
+            kind: "default",
+            run: async () => {
+              try {
+                await navigator.clipboard.writeText(shareUrl(s.token));
+              } catch {
+                // ignore
+              }
+            },
+          },
+          {
+            id: "open",
+            label: "Open",
+            icon: "🌐",
+            kind: "primary",
+            run: () => window.open(shareUrl(s.token), "_blank"),
+          },
+        ],
+      });
       setPassword("");
     } finally {
       setBusy(false);

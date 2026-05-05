@@ -96,6 +96,7 @@
   - [x] Toast notifications
   - [x] Notification center panel
   - [x] Permission-based per app — runtime grant/deny via `requestPermission()`, persisted, revocable from Settings
+  - [x] Action buttons — `actions: NotificationAction[]` (default/primary/danger styles) with built-in helpers `dismissAction()`, `snoozeAction(ms)`, `openAppAction(appId,…)` plus custom `run()`. Toasts with actions stay until interacted with; snoozed items show a 💤 pill with "Wake now" in the center; `runAction` surfaces failures as their own error notification.
 
 ---
 
