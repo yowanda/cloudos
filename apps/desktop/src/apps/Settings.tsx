@@ -1,7 +1,7 @@
 import { Component, For, createSignal, Show } from "solid-js";
-import { theme, setTheme, accentColor, setAccentColor } from "../stores/theme-store";
+import { theme, setTheme, accentColor, setAccentColor, wallpaper, setWallpaper } from "../stores/theme-store";
 
-type SettingsPage = "appearance" | "about";
+type SettingsPage = "appearance" | "wallpaper" | "about";
 
 const accentColors = [
   { name: "Indigo", value: "#6366f1" },
@@ -15,11 +15,27 @@ const accentColors = [
   { name: "Purple", value: "#a855f7" },
 ];
 
+const wallpapers = [
+  { name: "Default", value: "", preview: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" },
+  { name: "Sunset", value: "linear-gradient(135deg, #ff6b6b 0%, #feca57 50%, #ff9ff3 100%)", preview: "linear-gradient(135deg, #ff6b6b, #feca57, #ff9ff3)" },
+  { name: "Ocean", value: "linear-gradient(135deg, #0c2461 0%, #1e3799 40%, #0a3d62 100%)", preview: "linear-gradient(135deg, #0c2461, #1e3799, #0a3d62)" },
+  { name: "Forest", value: "linear-gradient(135deg, #0a3d0a 0%, #2d6a2d 50%, #1a4a1a 100%)", preview: "linear-gradient(135deg, #0a3d0a, #2d6a2d, #1a4a1a)" },
+  { name: "Aurora", value: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)", preview: "linear-gradient(135deg, #0f0c29, #302b63, #24243e)" },
+  { name: "Cherry", value: "linear-gradient(135deg, #3c1053 0%, #ad5389 100%)", preview: "linear-gradient(135deg, #3c1053, #ad5389)" },
+  { name: "Arctic", value: "linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%)", preview: "linear-gradient(135deg, #e0eafc, #cfdef3)" },
+  { name: "Neon", value: "linear-gradient(135deg, #0f0f0f 0%, #1a0033 50%, #0f0f0f 100%)", preview: "linear-gradient(135deg, #0f0f0f, #1a0033, #0f0f0f)" },
+  { name: "Warm", value: "linear-gradient(135deg, #2c1810 0%, #4a2c1a 50%, #3d1f10 100%)", preview: "linear-gradient(135deg, #2c1810, #4a2c1a, #3d1f10)" },
+  { name: "Sky", value: "linear-gradient(180deg, #87ceeb 0%, #4682b4 50%, #1e3a5f 100%)", preview: "linear-gradient(180deg, #87ceeb, #4682b4, #1e3a5f)" },
+  { name: "Midnight", value: "linear-gradient(135deg, #020024 0%, #090979 50%, #00d4ff 100%)", preview: "linear-gradient(135deg, #020024, #090979, #00d4ff)" },
+  { name: "Rose", value: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)", preview: "linear-gradient(135deg, #ffecd2, #fcb69f)" },
+];
+
 const Settings: Component<{ windowId: string }> = () => {
   const [page, setPage] = createSignal<SettingsPage>("appearance");
 
   const sidebarItems: { id: SettingsPage; label: string; icon: string }[] = [
     { id: "appearance", label: "Appearance", icon: "🎨" },
+    { id: "wallpaper", label: "Wallpaper", icon: "🖼️" },
     { id: "about", label: "About", icon: "ℹ️" },
   ];
 
@@ -101,6 +117,34 @@ const Settings: Component<{ windowId: string }> = () => {
           </div>
         </Show>
 
+        <Show when={page() === "wallpaper"}>
+          <h2 class="text-sm font-semibold mb-4">Wallpaper</h2>
+          <div class="grid grid-cols-3 gap-3">
+            <For each={wallpapers}>
+              {(wp) => (
+                <button
+                  class="relative rounded-xl overflow-hidden border-2 transition-all h-20 group"
+                  classList={{
+                    "border-os-accent shadow-lg shadow-os-accent/20": wallpaper() === wp.value,
+                    "border-os-border hover:border-os-accent/50": wallpaper() !== wp.value,
+                  }}
+                  onClick={() => setWallpaper(wp.value)}
+                >
+                  <div class="absolute inset-0" style={{ background: wp.preview }} />
+                  <div class="absolute inset-x-0 bottom-0 bg-black/50 px-2 py-1 text-[10px] text-white/80 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    {wp.name}
+                  </div>
+                  <Show when={wallpaper() === wp.value}>
+                    <div class="absolute top-1 right-1 w-4 h-4 rounded-full bg-os-accent flex items-center justify-center text-white text-[8px]">
+                      ✓
+                    </div>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+
         <Show when={page() === "about"}>
           <h2 class="text-sm font-semibold mb-4">About CloudOS</h2>
           <div class="space-y-3">
@@ -111,6 +155,10 @@ const Settings: Component<{ windowId: string }> = () => {
             <div class="flex justify-between py-2 border-b border-os-border">
               <span class="text-os-text-muted">Framework</span>
               <span>SolidJS</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-os-border">
+              <span class="text-os-text-muted">Backend</span>
+              <span>Go + Fiber</span>
             </div>
             <div class="flex justify-between py-2 border-b border-os-border">
               <span class="text-os-text-muted">Build</span>

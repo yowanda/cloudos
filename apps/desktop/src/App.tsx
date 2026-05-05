@@ -1,4 +1,4 @@
-import { Component, onMount } from "solid-js";
+import { Component, Show, onMount, createSignal } from "solid-js";
 import Desktop from "./shell/Desktop";
 import Taskbar from "./shell/Taskbar";
 import Dock from "./shell/Dock";
@@ -15,8 +15,12 @@ import LockScreen from "./shell/LockScreen";
 import { lockScreen } from "./stores/auth-store";
 import { ToastLayer, NotificationCenter } from "./shell/Notifications";
 import { notify } from "./stores/notification-store";
+import BootScreen from "./shell/BootScreen";
+import { DesktopWidgets } from "./shell/Widgets";
 
 const App: Component = () => {
+  const [booted, setBooted] = createSignal(false);
+
   onMount(() => {
     registerAllApps();
     // Alt+Tab: Window switcher
@@ -63,8 +67,10 @@ const App: Component = () => {
     });
 
     initShortcuts();
+  });
 
-    // Welcome notification
+  const handleBootComplete = () => {
+    setBooted(true);
     setTimeout(() => {
       notify({
         title: "Welcome to CloudOS",
@@ -72,13 +78,17 @@ const App: Component = () => {
         type: "info",
         icon: "☁️",
       });
-    }, 1500);
-  });
+    }, 500);
+  };
 
   return (
     <ThemeProvider>
       <div class="relative w-full h-full overflow-hidden bg-os-bg">
+        <Show when={!booted()}>
+          <BootScreen onComplete={handleBootComplete} />
+        </Show>
         <Desktop />
+        <DesktopWidgets />
         <WindowLayer />
         <StartMenu />
         <ContextMenuLayer />
