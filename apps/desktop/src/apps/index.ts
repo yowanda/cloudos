@@ -11,8 +11,10 @@ import AppStore from "./AppStore";
 import MediaPlayer from "./MediaPlayer";
 import Shortcuts from "./Shortcuts";
 import AIAssistant from "./AIAssistant";
+import { registerDemoManifests } from "../manifests";
 
 export function registerAllApps() {
+  registerDemoManifests();
   registerAppComponent("com.cloudos.files", FileManager);
   registerAppComponent("com.cloudos.terminal", Terminal);
   registerAppComponent("com.cloudos.editor", TextEditor);

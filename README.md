@@ -37,6 +37,7 @@
 | Media Player | Audio + video playback, library with search/filter, drag/drop file import, shuffle, repeat (off/all/one), real seek/volume/mute |
 | Shortcuts | Browse, remap, and reset all keyboard shortcuts |
 | AI Assistant | Pluggable LLM chat (OpenAI / Anthropic / Ollama / OpenAI-compatible / offline echo); persisted conversations, multi-chat sidebar, system prompt config |
+| Sandbox Hello / Stopwatch | Demo manifest apps running inside `sandbox="allow-scripts"` iframes, talking to the OS through `window.cloudos.*` IPC bridge — see [`docs/APPS.md`](./docs/APPS.md) |
 
 ### Cloud & Backend
 - **Go + Fiber** REST API backend

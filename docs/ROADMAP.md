@@ -152,14 +152,14 @@
   - [x] Notification center (panel overlay)
   - [x] Notification bell with unread badge
   - [x] Mark as read / clear all
-- [ ] App manifest system
-  - [ ] manifest.json spec
-  - [ ] Permission system (fs, clipboard, network, notifications)
-  - [ ] App lifecycle hooks
-- [ ] Sandboxed iframe apps
-  - [ ] Secure iframe sandbox
-  - [ ] postMessage IPC bridge
-  - [ ] OS API exposed to apps (window, fs, clipboard, notifications)
+- [x] App manifest system
+  - [x] AppManifest spec (`docs/APPS.md`) — id, version, icon, permissions, entry, window
+  - [x] Permission system (notifications, files.read/write, windows, clipboard.read/write)
+  - [x] Install / uninstall manifest at runtime, persisted to localStorage
+- [x] Sandboxed iframe apps
+  - [x] Secure iframe sandbox (`sandbox="allow-scripts"` for inline, +allow-same-origin for URL)
+  - [x] postMessage IPC bridge with permission-checked dispatch
+  - [x] OS API exposed (window.cloudos.{ping,notify,windows,vfs,clipboard,manifest})
 - [x] App Store
   - [x] Browse apps by category
   - [x] Install / uninstall

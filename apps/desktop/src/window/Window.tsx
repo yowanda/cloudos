@@ -2,6 +2,8 @@ import { Component, Show, createSignal } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import type { WindowConfig, SnapZone } from "@cloudos/shared";
 import { getAppComponent } from "../core/app-registry";
+import { getManifest } from "../core/app-manifest";
+import SandboxApp from "../apps/SandboxApp";
 import {
   closeWindow,
   focusWindow,
@@ -212,6 +214,10 @@ const Window: Component<{ config: WindowConfig }> = (props) => {
           const AppComp = getAppComponent(props.config.appId);
           if (AppComp) {
             return <Dynamic component={AppComp} windowId={props.config.id} />;
+          }
+          const manifest = getManifest(props.config.appId);
+          if (manifest && manifest.entry.type !== "builtin") {
+            return <SandboxApp manifestId={props.config.appId} windowId={props.config.id} />;
           }
           return (
             <div class="p-4 text-sm text-os-text-muted">

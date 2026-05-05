@@ -1,6 +1,7 @@
-import { Component, For, Show } from "solid-js";
+import { Component, For, Show, createMemo } from "solid-js";
 import { startMenuOpen, setStartMenuOpen } from "../stores/startmenu-store";
 import { openWindow, windowStore, focusWindow } from "../stores/window-store";
+import { listManifests, manifestsVersion } from "../core/app-manifest";
 
 interface AppEntry {
   id: string;
@@ -9,7 +10,7 @@ interface AppEntry {
   category: string;
 }
 
-const allApps: AppEntry[] = [
+const builtinApps: AppEntry[] = [
   { id: "com.cloudos.files", name: "Files", icon: "📁", category: "System" },
   { id: "com.cloudos.terminal", name: "Terminal", icon: "⬛", category: "System" },
   { id: "com.cloudos.editor", name: "Text Editor", icon: "📝", category: "System" },
@@ -25,14 +26,41 @@ const allApps: AppEntry[] = [
 ];
 
 export const StartMenu: Component = () => {
+  const allApps = createMemo<AppEntry[]>(() => {
+    void manifestsVersion();
+    const seen = new Set(builtinApps.map((a) => a.id));
+    const extra: AppEntry[] = [];
+    for (const m of listManifests()) {
+      if (seen.has(m.id)) continue;
+      extra.push({
+        id: m.id,
+        name: m.name,
+        icon: m.icon,
+        category: m.category ?? "Apps",
+      });
+    }
+    return [...builtinApps, ...extra];
+  });
+
   const launchApp = (app: AppEntry) => {
     setStartMenuOpen(false);
     const existing = windowStore.windows.find((w) => w.appId === app.id);
     if (existing) {
       focusWindow(existing.id);
-    } else {
-      openWindow({ appId: app.id, title: app.name, icon: app.icon });
+      return;
     }
+    void manifestsVersion();
+    const m = listManifests().find((x) => x.id === app.id);
+    openWindow({
+      appId: app.id,
+      title: app.name,
+      icon: app.icon,
+      width: m?.window?.width,
+      height: m?.window?.height,
+      resizable: m?.window?.resizable,
+      minWidth: m?.window?.minWidth,
+      minHeight: m?.window?.minHeight,
+    });
   };
 
   return (
@@ -52,7 +80,7 @@ export const StartMenu: Component = () => {
 
         {/* App Grid */}
         <div class="p-3 grid grid-cols-3 gap-2 overflow-y-auto max-h-[50vh]">
-          <For each={allApps}>
+          <For each={allApps()}>
             {(app) => (
               <button
                 class="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-os-surface-hover transition-colors"
