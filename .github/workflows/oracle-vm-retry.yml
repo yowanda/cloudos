@@ -1,0 +1,96 @@
+name: Oracle ARM A1 capacity retry
+
+# Repeatedly attempts to launch a VM.Standard.A1.Flex instance in the
+# configured region until Oracle Cloud Always Free capacity becomes
+# available. Once the launch succeeds the workflow opens a GitHub issue
+# with the instance OCID and disables itself so it stops costing minutes.
+#
+# To enable: configure the secrets listed in docs/ORACLE_AUTO_RETRY.md
+# then trigger the workflow once via the Actions tab. Cron will keep it
+# running every 10 minutes after that.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      ocpus:
+        description: "OCPUs (Always Free max 4)"
+        required: false
+        default: "4"
+      memory_gb:
+        description: "Memory GB (Always Free max 24)"
+        required: false
+        default: "24"
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: oracle-vm-retry
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    name: Attempt LaunchInstance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install oci SDK
+        run: pip install --quiet "oci>=2.130"
+      - id: launch
+        name: Launch instance (retry-friendly)
+        env:
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_COMPARTMENT_OCID: ${{ secrets.OCI_COMPARTMENT_OCID }}
+          OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
+          OCI_SUBNET_OCID: ${{ secrets.OCI_SUBNET_OCID }}
+          OCI_IMAGE_OCID: ${{ secrets.OCI_IMAGE_OCID }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          OCI_OCPUS: ${{ inputs.ocpus || '4' }}
+          OCI_MEMORY_GB: ${{ inputs.memory_gb || '24' }}
+        run: python scripts/launch-oracle-vm.py
+      - name: Notify via GitHub issue (success only)
+        if: steps.launch.outputs.success == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const instanceId = `${{ steps.launch.outputs.instance_id }}`;
+            const displayName = `${{ steps.launch.outputs.display_name }}`;
+            const region = `${{ secrets.OCI_REGION }}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Oracle ARM A1 VM launched: ${displayName}`,
+              body: [
+                `The auto-retry workflow successfully launched an ARM A1 VM.`,
+                ``,
+                `- Instance OCID: \`${instanceId}\``,
+                `- Display name: \`${displayName}\``,
+                `- Region: \`${region}\``,
+                ``,
+                `Next steps:`,
+                `1. Go to the Oracle Cloud Console and look up the new instance's public IPv4 address.`,
+                `2. SSH in: \`ssh -i ~/.ssh/cloudos_oracle ubuntu@<public-ip>\`.`,
+                `3. Follow [docs/PUBLIC_HOSTING.md](../blob/main/docs/PUBLIC_HOSTING.md) from "Step 3 — Open ports 80/443" onwards.`,
+                ``,
+                `The retry workflow has been disabled to avoid duplicate VMs.`,
+                `Re-enable manually from the Actions tab if you ever need it again.`,
+              ].join("\n"),
+              labels: ["infrastructure", "oracle-cloud"],
+            });
+      - name: Disable workflow on success
+        if: steps.launch.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow disable "${{ github.workflow }}"
