@@ -1,0 +1,49 @@
+# Caddyfile for the docker-compose.prod.yml deployment.
+#
+# Caddy runs as a service in the same compose network, so it talks to
+# `frontend` and `server` over the docker bridge. Replace `{$DOMAIN}`
+# with your actual hostname before first boot — Caddy will provision a
+# Let's Encrypt cert automatically.
+#
+# Test with `caddy validate --config Caddyfile` after edits.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	tls {$ACME_EMAIL}
+
+	# Backend API — long path takes precedence over the SPA fallback.
+	handle /api/* {
+		reverse_proxy server:3000
+	}
+	handle /auth/* {
+		reverse_proxy server:3000
+	}
+	handle /health {
+		reverse_proxy server:3000
+	}
+	handle /ready {
+		reverse_proxy server:3000
+	}
+	handle /ws/* {
+		reverse_proxy server:3000
+	}
+
+	# Frontend SPA — single-page bundle served by the desktop nginx.
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

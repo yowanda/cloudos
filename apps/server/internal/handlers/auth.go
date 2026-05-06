@@ -7,11 +7,12 @@ import (
 )
 
 type AuthHandler struct {
-	authService *services.AuthService
+	authService       *services.AuthService
+	allowRegistration bool
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService *services.AuthService, allowRegistration bool) *AuthHandler {
+	return &AuthHandler{authService: authService, allowRegistration: allowRegistration}
 }
 
 type RegisterRequest struct {
@@ -26,6 +27,9 @@ type LoginRequest struct {
 }
 
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	if !h.allowRegistration {
+		return c.Status(403).JSON(fiber.Map{"error": "Registration is closed on this server"})
+	}
 	var req RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})

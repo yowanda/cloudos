@@ -5,6 +5,11 @@ team or for personal use. Single-VPS deployments are well-supported; this
 guide assumes one Linux VM with Docker. For multi-node Kubernetes, the same
 container images apply but you'll need to author Helm charts yourself.
 
+> **Looking for a step-by-step "from a fresh cloud account to a public
+> URL" walkthrough?** See [PUBLIC_HOSTING.md](./PUBLIC_HOSTING.md) for
+> an end-to-end Oracle Cloud Always Free + Cloudflare guide that
+> targets the same docker-compose stack but starts from zero.
+
 > Looking to self-host the **AI Assistant's LLM backend** instead of (or
 > in addition to) the OS itself? See
 > [OLLAMA_HOSTING.md](./OLLAMA_HOSTING.md) for an end-to-end guide to

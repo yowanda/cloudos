@@ -39,7 +39,7 @@ func main() {
 	}
 
 	// Handlers
-	authHandler := handlers.NewAuthHandler(authService)
+	authHandler := handlers.NewAuthHandler(authService, cfg.AllowRegistration)
 	fileHandler := handlers.NewFileHandler(fileService)
 	vfsHandler := handlers.NewVFSHandler("data/vfs")
 	shareHandler := handlers.NewShareHandler(database.DB)

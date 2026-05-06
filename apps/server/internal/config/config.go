@@ -22,6 +22,13 @@ type Config struct {
 	// submission review endpoints). Comma-separated in env via
 	// ADMIN_EMAILS=alice@x.com,bob@y.com — never sent to clients.
 	AdminEmails map[string]struct{}
+	// AllowRegistration controls whether POST /api/v1/auth/register is
+	// open to the public. Defaults to true so single-user / dev setups
+	// keep working, but production public deployments typically flip
+	// this to false after the first user is created so the host's
+	// resources aren't open for arbitrary signups. Toggled via
+	// ALLOW_REGISTRATION=false in env.
+	AllowRegistration bool
 }
 
 type DBConfig struct {
@@ -44,8 +51,8 @@ type S3Config struct {
 
 func Load() *Config {
 	return &Config{
-		Port:      getEnv("PORT", "3000"),
-		JWTSecret: getEnv("JWT_SECRET", "cloudos-dev-secret-change-in-production"),
+		Port:       getEnv("PORT", "3000"),
+		JWTSecret:  getEnv("JWT_SECRET", "cloudos-dev-secret-change-in-production"),
 		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:4100"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -63,9 +70,10 @@ func Load() *Config {
 			Region:    getEnv("S3_REGION", "us-east-1"),
 			UseSSL:    getEnv("S3_USE_SSL", "false") == "true",
 		},
-		EnablePTY:   getEnv("ENABLE_PTY", "false") == "true",
-		PTYShell:    getEnv("PTY_SHELL", "/bin/bash"),
-		AdminEmails: parseAdminEmails(getEnv("ADMIN_EMAILS", "")),
+		EnablePTY:         getEnv("ENABLE_PTY", "false") == "true",
+		PTYShell:          getEnv("PTY_SHELL", "/bin/bash"),
+		AdminEmails:       parseAdminEmails(getEnv("ADMIN_EMAILS", "")),
+		AllowRegistration: getEnv("ALLOW_REGISTRATION", "true") != "false",
 	}
 }
 

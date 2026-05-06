@@ -36,6 +36,7 @@ func TestLoadDefaults(t *testing.T) {
 		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
 		"S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_BUCKET", "S3_REGION", "S3_USE_SSL",
 		"ENABLE_PTY", "PTY_SHELL",
+		"ALLOW_REGISTRATION", "ADMIN_EMAILS",
 	} {
 		t.Setenv(key, "")
 	}
@@ -61,6 +62,35 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.S3.UseSSL {
 		t.Errorf("S3.UseSSL default = true, want false")
+	}
+	if !cfg.AllowRegistration {
+		t.Errorf("AllowRegistration default = false, want true (open by default; flip to false in production)")
+	}
+}
+
+// TestLoadAllowRegistration verifies the explicit-opt-out form reads
+// back as false, and any other value (including the default) keeps
+// registration open.
+func TestLoadAllowRegistration(t *testing.T) {
+	cases := []struct {
+		env  string
+		want bool
+	}{
+		{"", true},       // unset → default true
+		{"true", true},   // explicit true
+		{"TRUE", true},   // env strings are case-sensitive only on the literal "false"
+		{"1", true},      // anything not equal to "false"
+		{"false", false}, // explicit opt-out
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.env, func(t *testing.T) {
+			t.Setenv("ALLOW_REGISTRATION", tc.env)
+			got := Load().AllowRegistration
+			if got != tc.want {
+				t.Errorf("ALLOW_REGISTRATION=%q → %v, want %v", tc.env, got, tc.want)
+			}
+		})
 	}
 }
 

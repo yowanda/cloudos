@@ -1,0 +1,135 @@
+# CloudOS production stack.
+#
+# What's different from the root docker-compose.yml:
+#   - Uses pre-built images from GHCR (no local source tree needed) so
+#     this file works on any VPS — only Docker is required.
+#   - Includes Caddy as a service (auto Let's Encrypt + reverse proxy)
+#     so you don't have to install Caddy on the host.
+#   - Internal services (postgres, redis, minio, meilisearch) do NOT
+#     publish ports to the host — only Caddy is reachable from the
+#     internet, and only on 80/443.
+#   - Reads all secrets from a `.env` sibling file (see
+#     deploy/.env.example).
+#
+# Usage (on a fresh VPS):
+#   curl -fsSL https://get.docker.com | sh
+#   sudo mkdir -p /opt/cloudos && cd /opt/cloudos
+#   curl -fsSL https://raw.githubusercontent.com/yowanda/cloudos/main/deploy/docker-compose.prod.yml -o docker-compose.yml
+#   curl -fsSL https://raw.githubusercontent.com/yowanda/cloudos/main/deploy/.env.example -o .env
+#   curl -fsSL https://raw.githubusercontent.com/yowanda/cloudos/main/deploy/Caddyfile.prod -o Caddyfile
+#   $EDITOR .env Caddyfile  # fill in DOMAIN, secrets, etc.
+#   docker compose up -d
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    depends_on:
+      - frontend
+      - server
+    networks: [cloudos-net]
+
+  frontend:
+    image: ghcr.io/yowanda/cloudos-desktop:${CLOUDOS_TAG:-latest}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [cloudos-net]
+
+  server:
+    image: ghcr.io/yowanda/cloudos-server:${CLOUDOS_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: cloudos
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: cloudos
+      DB_SSLMODE: disable
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: cloudos-files
+      S3_USE_SSL: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      ENABLE_PTY: ${ENABLE_PTY:-false}
+      PTY_SHELL: ${PTY_SHELL:-/bin/bash}
+    volumes:
+      - server_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [cloudos-net]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cloudos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: cloudos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [cloudos-net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks: [cloudos-net]
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks: [cloudos-net]
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  server_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  cloudos-net:
+    driver: bridge

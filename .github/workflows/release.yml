@@ -40,6 +40,7 @@ jobs:
           context: ./apps/server
           file: ./apps/server/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/cloudos-server:${{ steps.version.outputs.tag }}
             ghcr.io/${{ github.repository_owner }}/cloudos-server:latest
@@ -52,6 +53,7 @@ jobs:
           context: .
           file: ./apps/desktop/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/cloudos-desktop:${{ steps.version.outputs.tag }}
             ghcr.io/${{ github.repository_owner }}/cloudos-desktop:latest
