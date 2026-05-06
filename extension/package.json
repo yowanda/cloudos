@@ -1,0 +1,19 @@
+{
+  "name": "@cloudos/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CloudOS browser extension — open your CloudOS desktop in every new tab.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "lint": "biome check src/ scripts/",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
