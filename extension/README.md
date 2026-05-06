@@ -136,10 +136,24 @@ pnpm --filter @cloudos/extension build      # produces dist/cloudos-extension.zi
 Bump the `version` field in `extension/package.json`, rebuild, and upload
 `dist/cloudos-extension.zip` to:
 
-- [Chrome Web Store](https://chrome.google.com/webstore/devconsole/) — the
-  manifest's `chrome_url_overrides.newtab` is allowed without review caveats.
-- [Firefox AMO](https://addons.mozilla.org/developers/) — sign the same zip
-  and distribute the signed `.xpi`.
+- **Chrome Web Store** — <https://chrome.google.com/webstore/devconsole>
+- **Firefox AMO** — <https://addons.mozilla.org/developers/>
+
+The store listing copy (description, permission justifications,
+single-purpose statement, data-use disclosures) lives in
+[`store/listing.md`](./store/listing.md). Pre-rendered promotional
+assets (1280×800 screenshots, 440×280 promo tile, 128×128 logo) live
+next to it under `store/`. The privacy policy that the Chrome Web Store
+listing must link to is [`docs/EXTENSION_PRIVACY.md`](../docs/EXTENSION_PRIVACY.md)
+at the repo root — paste
+`https://github.com/yowanda/cloudos/blob/main/docs/EXTENSION_PRIVACY.md`
+into the dashboard's privacy-policy URL field.
+
+Notes per store:
+
+- **Chrome Web Store** — the manifest's `chrome_url_overrides.newtab` is
+  allowed without review caveats.
+- **Firefox AMO** — sign the same zip and distribute the signed `.xpi`.
 
 ## Permissions rationale
 
