@@ -10,12 +10,11 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "CloudOS",
+    "default_title": "CloudOS — open options",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png"
-    },
-    "default_popup": "options/index.html"
+    }
   },
   "chrome_url_overrides": {
     "newtab": "newtab/index.html"
@@ -28,20 +27,18 @@
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
-  "permissions": ["storage", "history"],
+  "permissions": ["storage", "history", "scripting"],
   "optional_host_permissions": ["<all_urls>"],
-  "content_scripts": [
+  "web_accessible_resources": [
     {
-      "matches": ["http://localhost/*", "https://localhost/*"],
-      "js": ["content/bridge.js"],
-      "run_at": "document_idle",
-      "all_frames": false
+      "resources": ["content/bridge.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "browser_specific_settings": {
     "gecko": {
       "id": "cloudos@cloudos.dev",
-      "strict_min_version": "115.0"
+      "strict_min_version": "128.0"
     }
   }
 }

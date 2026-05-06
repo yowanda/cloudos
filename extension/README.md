@@ -59,7 +59,7 @@ brew install librsvg                     # macOS
 5. Open a new tab — you'll see the setup card. Paste your CloudOS URL and hit
    **Save & open**.
 
-### Firefox (115+)
+### Firefox (128+)
 
 Firefox doesn't allow `chrome_url_overrides.newtab` for unsigned MV3
 extensions, so for development:
@@ -69,6 +69,10 @@ extensions, so for development:
 3. Click **Load Temporary Add-on…**, pick `extension/dist/manifest.json`.
 4. Visit `about:preferences#home` → set **Homepage and new windows** to your
    CloudOS URL (Firefox treats the new-tab override as an opt-in setting).
+
+The minimum supported Firefox version is **128** because the bridge uses
+`chrome.scripting.registerContentScripts` for dynamic content-script
+injection, which Firefox added in 128.
 
 For production you'll need to sign the zip via [AMO][amo] and distribute it
 that way.
@@ -143,7 +147,8 @@ Bump the `version` field in `extension/package.json`, rebuild, and upload
 | ---------- | --- | --------- |
 | `storage` | Persist the user's CloudOS URL and feature toggles. | No — required by the new-tab page. |
 | `history` | Power the optional `/recent` bridge. | Effectively yes — only used when the toggle is on. |
-| `<all_urls>` (host) | Listed under `optional_host_permissions`; only requested at runtime when the user clicks **Grant host permission**. | Yes — opt-in per origin. |
+| `scripting` | Dynamically register the bridge content script for the user's configured CloudOS origin (only after the host permission for that origin has been granted). | No — but the registration call is a no-op until the user opts in. |
+| `<all_urls>` (host) | Listed under `optional_host_permissions`; only requested at runtime when the user clicks **Grant host permission** — and only for the single configured CloudOS origin, not actually all URLs. | Yes — opt-in per origin. |
 
 The extension does not collect telemetry, does not phone home, and never
 forwards browsing history off the device. The full source is in this monorepo.

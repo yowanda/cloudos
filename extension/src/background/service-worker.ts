@@ -116,10 +116,84 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
-// Surface install / update events so the user sees an options page on first
-// install. A noop on update so we don't surprise them with a new tab.
+// ---------------------------------------------------------------------------
+// Dynamic content-script registration
+// ---------------------------------------------------------------------------
+//
+// The bridge content script needs to run in whichever origin the user
+// configured as their CloudOS instance. We can't list that statically in
+// the manifest because it's user-configurable, so we register the script
+// at runtime once (a) the user has saved a URL, (b) they've toggled the
+// history bridge on, and (c) they've granted host permission for that
+// origin via `chrome.permissions.request`.
+
+const BRIDGE_SCRIPT_ID = "cloudos-bridge";
+
+async function syncContentScripts(): Promise<void> {
+  // Always start by removing any previous registration so URL changes don't
+  // leak the old origin.
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [BRIDGE_SCRIPT_ID] });
+  } catch {
+    // unregister throws when the id isn't currently registered; that's fine.
+  }
+
+  const settings = await loadSettings();
+  const expectedOrigin = originOf(settings.cloudosUrl);
+  if (!expectedOrigin) return;
+  if (!settings.historyBridgeEnabled) return;
+
+  const matchPattern = `${expectedOrigin}/*`;
+  const hasPerm = await chrome.permissions.contains({ origins: [matchPattern] });
+  if (!hasPerm) return;
+
+  try {
+    await chrome.scripting.registerContentScripts([
+      {
+        id: BRIDGE_SCRIPT_ID,
+        matches: [matchPattern],
+        js: ["content/bridge.js"],
+        runAt: "document_idle",
+        allFrames: false,
+      },
+    ]);
+  } catch (err) {
+    console.warn("[cloudos] failed to register bridge content script", err);
+  }
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
+  void syncContentScripts();
+  // Open the options page on first install so the user knows what to do.
   if (details.reason === "install" && chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void syncContentScripts();
+});
+
+chrome.permissions.onAdded.addListener(() => {
+  void syncContentScripts();
+});
+
+chrome.permissions.onRemoved.addListener(() => {
+  void syncContentScripts();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  if ("cloudosUrl" in changes || "historyBridgeEnabled" in changes) {
+    void syncContentScripts();
+  }
+});
+
+// Toolbar action: open the full options tab instead of a popup. The popup
+// route makes the page render at ~360px which truncates the URL field, and
+// users expect "click icon → settings tab".
+chrome.action.onClicked.addListener(() => {
+  if (chrome.runtime.openOptionsPage) {
     chrome.runtime.openOptionsPage();
   }
 });
