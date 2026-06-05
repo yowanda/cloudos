@@ -6,30 +6,23 @@
  *
  *   - Navigation requests (HTML, the `/` shell)
  *       network-first with a fallback to the cached `/` shell so the
- *       desktop boots even with no connectivity. The shell only renders
- *       the React tree; once it's running, the in-memory VFS, themes,
- *       and notifications work offline since they were never network-
- *       backed in the first place.
+ *       desktop boots even with no connectivity.
  *
- *   - Static assets (`*.js`, `*.css`, `*.svg`, `*.png`, `*.webmanifest`,
- *     `/assets/*` Vite chunks)
+ *   - Static assets (`*.js`, `*.css`, `*.svg`, `*.png`, `*.webmanifest`)
  *       stale-while-revalidate — serve from cache instantly, refresh
  *       in the background.
  *
  *   - API requests (`/api/`, `/auth/`, `/ws/`)
- *       network-only — never cached. Auth tokens and live data must
- *       always go to the network so we don't serve stale credentials
- *       or stale snapshots. The client (auth-store, vfs remote sync)
- *       handles the failure mode itself.
+ *       network-only — never cached.
  *
  *   - Everything else
  *       network-only with no cache.
  *
- * Cache name is versioned; bumping the version on a new deploy purges
- * the old cache during `activate`, so users get the new shell on the
- * next reload after install.
+ * Cache name includes build timestamp; bumping purges old cache on deploy.
  */
-const CACHE_VERSION = "cloudos-shell-v2";
+
+// Cache version includes timestamp for automatic cache busting
+const CACHE_VERSION = "cloudos-shell-v3-" + (self.__BUILD_HASH__ || Date.now());
 const SHELL_URLS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
